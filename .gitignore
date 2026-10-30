@@ -1,0 +1,25 @@
+.gradle/
+.idea/
+local.properties
+**/build/
+*.iml
+.test-build/
+.storage-tests/
+.feature-tests/
+.android-tests/
+.sdk-build/
+*.apk
+*.idsig
+
+# Local signing material must never enter source control.
+*.keystore
+*.jks
+
+# Private exports, environment files and local build staging
+.env
+.env.*
+*.hprof
+classes-*/
+
+# Raw device and build logs are local diagnostics, not publication assets.
+*.log

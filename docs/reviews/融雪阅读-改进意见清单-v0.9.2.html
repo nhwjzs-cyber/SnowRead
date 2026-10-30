@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>融雪阅读 · 代码复核与改进意见清单 v0.9.2</title>
+<style>
+  :root{
+    --paper:#F3EDE0; --surface:#FFFCF5; --ink:#193E4B; --ink-2:#2E5563;
+    --muted:#5E7580; --line:#DCE5E4; --accent:#0F5F73; --accent-2:#248FA9;
+    --soft:#E2F3F6; --warm:#F0E5D1; --green:#6B8F71; --red:#9A493E; --amber:#8A6A2F;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    font-size:15px; line-height:1.75; letter-spacing:.01em;
+  }
+  .wrap{max-width:1080px; margin:0 auto; padding:48px 24px 96px}
+  header.hero{
+    background:var(--surface); border:1px solid var(--line); border-radius:22px;
+    padding:38px 40px 30px; position:relative; overflow:hidden;
+  }
+  header.hero::after{
+    content:"雪"; position:absolute; right:-10px; bottom:-58px; font-family:serif;
+    font-size:220px; color:var(--soft); line-height:1; pointer-events:none;
+  }
+  .eyebrow{font-size:11px; letter-spacing:.22em; color:var(--accent); text-transform:uppercase}
+  h1{
+    font-family:"Songti SC","Noto Serif CJK SC",Georgia,serif;
+    font-size:34px; line-height:1.35; margin:10px 0 6px; font-weight:600; letter-spacing:.01em;
+  }
+  .sub{color:var(--muted); font-size:14px; margin:0 0 22px}
+  .meta{display:flex; flex-wrap:wrap; gap:8px; position:relative; z-index:1}
+  .chip{
+    font-size:12px; padding:5px 11px; border-radius:999px; background:var(--soft);
+    color:var(--accent); border:1px solid #CFE7EC; white-space:nowrap;
+  }
+  .chip.plain{background:#fff; border-color:var(--line); color:var(--ink-2)}
+
+  nav.toc{
+    margin:22px 0 0; background:var(--surface); border:1px solid var(--line);
+    border-radius:18px; padding:20px 24px;
+  }
+  nav.toc h2{font-size:12px; letter-spacing:.18em; color:var(--muted); margin:0 0 12px; font-weight:600}
+  .toc-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:6px 22px}
+  nav.toc a{
+    color:var(--ink-2); text-decoration:none; font-size:13.5px; padding:5px 0;
+    border-bottom:1px dashed transparent; display:block;
+  }
+  nav.toc a:hover{color:var(--accent); border-bottom-color:var(--accent-2);}
+  nav.toc a span{color:var(--muted); font-variant-numeric:tabular-nums; margin-right:8px}
+
+  section{margin-top:44px}
+  h2.sec{
+    font-family:"Songti SC","Noto Serif CJK SC",Georgia,serif;
+    font-size:23px; margin:0 0 6px; font-weight:600; letter-spacing:.02em;
+    display:flex; align-items:baseline; gap:12px;
+  }
+  h2.sec .no{
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px;
+    color:var(--accent); background:var(--soft); padding:3px 8px; border-radius:6px; font-weight:500;
+  }
+  .lede{color:var(--muted); font-size:14px; margin:0 0 18px; max-width:76ch}
+
+  .lead-list{background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:8px 26px 18px; margin:0}
+  .lead-list ol{margin:8px 0 0; padding-left:20px}
+  .lead-list li{margin:9px 0; padding-left:4px}
+  .lead-list li::marker{color:var(--accent-2); font-weight:600}
+  b.hl{background:linear-gradient(transparent 62%, #D9EEF1 62%); font-weight:600}
+
+  .card{
+    background:var(--surface); border:1px solid var(--line); border-radius:18px;
+    padding:22px 26px 20px; margin:14px 0; position:relative;
+  }
+  .card.p0{border-left:3px solid var(--accent)}
+  .card h3{
+    font-size:17px; margin:0 0 4px; font-weight:600; display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+  }
+  .tag{
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px;
+    color:var(--muted); background:#F4F7F7; border:1px solid var(--line);
+    padding:2px 7px; border-radius:5px; font-weight:500;
+  }
+  .tag.hot{color:#fff; background:var(--accent); border-color:var(--accent)}
+  .tag.mid{color:var(--amber); background:#FBF3E4; border-color:#EBDCC0}
+  .row{display:flex; gap:12px; margin:10px 0 0; font-size:14px}
+  .row .k{
+    flex:0 0 44px; color:var(--muted); font-size:12px; letter-spacing:.08em; padding-top:3px;
+  }
+  .row .v{flex:1; min-width:0}
+  code, .mono{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px;
+    background:#F4F7F7; border:1px solid #E6ECEC; border-radius:4px; padding:1px 5px;
+    color:var(--ink-2); word-break:break-word;
+  }
+  pre{
+    background:#F4F7F7; border:1px solid #E6ECEC; border-radius:10px;
+    padding:12px 14px; overflow:auto; margin:10px 0 0; font-size:12.5px; line-height:1.7;
+  }
+  pre code{background:none; border:0; padding:0; font-size:12.5px}
+
+  table{
+    width:100%; border-collapse:separate; border-spacing:0; margin:14px 0 0;
+    background:var(--surface); border:1px solid var(--line); border-radius:14px; overflow:hidden;
+    font-size:13.5px;
+  }
+  thead th{
+    text-align:left; font-weight:600; font-size:12px; letter-spacing:.06em; color:var(--muted);
+    background:#F7F4EC; padding:11px 12px; border-bottom:1px solid var(--line); white-space:nowrap;
+  }
+  tbody td{padding:11px 12px; border-bottom:1px solid #EDF1F0; vertical-align:top}
+  tbody tr:last-child td{border-bottom:0}
+  tbody tr:hover{background:#FBF8F1}
+  td.id{font-family:ui-monospace,Menlo,monospace; font-size:12px; color:var(--accent); white-space:nowrap}
+  td.c{text-align:center; white-space:nowrap}
+  .eff{display:inline-block; min-width:22px; text-align:center; font-size:11px; font-family:ui-monospace,Menlo,monospace;
+       border:1px solid var(--line); border-radius:5px; padding:1px 5px; color:var(--ink-2); background:#fff}
+
+  .note{
+    border-left:3px solid var(--warm); background:#FBF6EA; padding:14px 18px;
+    border-radius:0 12px 12px 0; color:var(--ink-2); font-size:14px; margin:16px 0;
+  }
+  .note strong{color:var(--amber)}
+  .warn{border-left-color:#E3C9C3; background:#FBF1EF}
+  .warn strong{color:var(--red)}
+
+  .grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px}
+  .mini{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:16px 18px}
+  .mini h4{margin:0 0 6px; font-size:14.5px; font-weight:600}
+  .mini p{margin:0; font-size:13.5px; color:var(--ink-2)}
+
+  .sched{list-style:none; margin:14px 0 0; padding:0}
+  .sched li{
+    display:grid; grid-template-columns:96px 1fr; gap:16px; padding:14px 0;
+    border-bottom:1px dashed var(--line); align-items:start;
+  }
+  .sched li:last-child{border-bottom:0}
+  .sched .ver{
+    font-family:ui-monospace,Menlo,monospace; font-size:13px; color:#fff; background:var(--accent);
+    border-radius:8px; padding:4px 10px; text-align:center;
+  }
+  .sched .ver.alt{background:var(--accent-2)}
+  .sched .ver.dim{background:#7E9AA4}
+
+  footer{margin-top:56px; padding-top:22px; border-top:1px solid var(--line); color:var(--muted); font-size:12.5px}
+  footer p{margin:4px 0}
+
+  @media (max-width:640px){
+    .wrap{padding:24px 14px 64px}
+    header.hero{padding:26px 22px}
+    h1{font-size:26px}
+    .card{padding:18px 18px 16px}
+    .row{flex-direction:column; gap:3px}
+    .row .k{padding-top:0}
+    thead th, tbody td{padding:9px 10px}
+    table{font-size:12.5px}
+    .sched li{grid-template-columns:78px 1fr; gap:10px}
+  }
+  @media print{
+    body{background:#fff; font-size:11pt}
+    .wrap{max-width:none; padding:0}
+    header.hero, .card, table, nav.toc, .lead-list, .mini{break-inside:avoid}
+    nav.toc{display:none}
+    section{margin-top:26px}
+    a{color:inherit; text-decoration:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">Code Review · v0.9.2</div>
+  <h1>融雪阅读 · 改进意见清单</h1>
+  <p class="sub">对照源码逐条核对：36 个源文件 / 3,253 行 Java，按"用户动作 → 调用链 → 线程 → 分配与 I/O"定位可优化点。</p>
+  <div class="meta">
+    <span class="chip">基线 0.9.2 / versionCode 13</span>
+    <span class="chip plain">APK 177,969 B</span>
+    <span class="chip plain">minSdk 23 · targetSdk 35</span>
+    <span class="chip plain">零第三方依赖</span>
+    <span class="chip plain">无 INTERNET 权限</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <h2>目录</h2>
+  <div class="toc-grid">
+    <a href="#s1"><span>01</span>摘要：如果只看一页</a>
+    <a href="#s2"><span>02</span>效率与性能（P0）</a>
+    <a href="#s3"><span>03</span>效率与性能（P1）</a>
+    <a href="#s4"><span>04</span>正确性与健壮性</a>
+    <a href="#s5"><span>05</span>功能改进建议</a>
+    <a href="#s6"><span>06</span>工程与可维护性</a>
+    <a href="#s7"><span>07</span>不建议做的事</a>
+    <a href="#s8"><span>08</span>与原待办清单对照</a>
+    <a href="#s9"><span>09</span>排期与验收</a>
+  </div>
+</nav>
+
+<section id="s1">
+  <h2 class="sec"><span class="no">01</span>摘要：如果只看一页</h2>
+  <p class="lede">工程质量整体偏上——纯 Java 文本引擎与 Android 解耦、索引原子写、备份逐字节校验、长任务可取消、零依赖、无网络权限。这些不要动。真正的瓶颈已经不在功能数量，而在三条高频路径。</p>
+  <div class="lead-list">
+    <ol>
+      <li>体验瓶颈集中在<b class="hl">写库、听书高亮、分页测量</b>三条路径，而不是缺少功能。</li>
+      <li><b class="hl">写库在主线程 fsync</b>：滚动停止、加书签、改名都会卡一下；500 本时每次序列化百 KB 级 JSON。</li>
+      <li><b class="hl">听书每朗读一个词</b>就重建整页 <code>StaticLayout</code>，并把整个列表 <code>notifyDataSetChanged()</code>。</li>
+      <li><b class="hl">分页每算一页都排版 8192 字</b>，而一页通常只有 300–600 字；页索引不落盘，改字号全部重算。</li>
+      <li><b class="hl">四个列表没有复用 convertView</b>，目录上万项时滚动成本随距离线性增长。</li>
+      <li>5 个 P0 合计约 <b>5–7 人日</b>，能清掉大部分"卡一下"的体感问题，且不改数据结构与格式版本。</li>
+      <li>功能上最值得补的三个洞：<b>内置开源宋体</b>、<b>按书独立排版</b>、<b>阅读位置与编码解耦</b>。</li>
+      <li>最该克制的：<b>继续增加管理维度</b>。书架的管理成本已接近临界点。</li>
+    </ol>
+  </div>
+</section>
+
+<section id="s2">
+  <h2 class="sec"><span class="no">02</span>效率与性能 · P0</h2>
+  <p class="lede">五项都能被用户直接感知，且都不需要改数据格式。建议下一版集中处理。</p>
+
+  <article class="card p0">
+    <h3><span class="tag hot">E01</span>书库在主线程写盘并 fsync <span class="eff">M</span></h3>
+    <div class="row"><div class="k">证据</div><div class="v"><code>MainActivity.persist():585</code> 直接调用 <code>LibraryStore.save():140-146</code>，后者 <code>metadata()</code> 序列化全部书籍，再经 <code>AtomicFile.finishWrite()</code> 落盘（内含 fsync）。调用点全在 UI 线程：滚动停止 <code>:466</code>、翻页 <code>:453</code>、退出 <code>:586</code>、开书 <code>:423</code>、排版预览 <code>:668</code>，以及加书签 <code>:800</code>、改名 <code>:866</code>、分类 <code>:223</code>。</div></div>
+    <div class="row"><div class="k">问题</div><div class="v">500 本时每次保存要构建 500 个 <code>JSONObject</code> + 序列化 + 写盘 + fsync，量级百 KB / 5–20 ms。它恰好发生在"手指刚停下"的瞬间，是最容易被感知为卡顿的位置；听书时还会与 IO 线程争锁。</div></div>
+    <div class="row"><div class="k">建议</div><div class="v">引入单一写库通道 <code>LibraryWriter</code>：内存模型立即改，落盘走单线程 + dirty 标记 + 200–400 ms 合并窗口；<code>onPause</code>、退出阅读、导入结束、备份前强制 flush；写失败回滚快照并提示。<code>LibraryStore.save()</code> 保持同步语义，只是不再由 UI 线程调用。</div></div>
+    <div class="row"><div class="k">收益</div><div class="v">消除滚动停止、加书签、改名时的主线程 fsync，写盘次数从"每次动作"降到"每次窗口"。</div></div>
+  </article>
+
+  <article class="card p0">
+    <h3><span class="tag hot">E02</span>听书每朗读一句就整库重写 <span class="eff">S</span></h3>
+    <div class="row"><div class="k">证据</div><div class="v"><code>ListenService.save(boolean):139</code> → <code>LibraryRepository.progress():33-38</code> → <code>store.save()</code>。<code>onStart</code> 回调（<code>:69</code>）每句都调用 <code>save(false)</code>；<code>force=false</code> 只做"同时只有一个在飞"的合并，不做时间窗合并，因此约每句（3–6 秒）落盘一次全量索引。</div></div>
+    <div class="row"><div class="k">问题</div><div class="v">听书 1 小时 ≈ 600–1000 次全量写 + fsync。耗电、闪存写放大，并在朗读间隙可能触发 GC 与 IO 抖动。</div></div>
+    <div class="row"><div class="k">建议</div><div class="v">进度按"每 10 秒 或 章节切换"落盘；<code>pause</code> / <code>stop</code> / <code>onDestroy</code> / 切书强制落盘；句子粒度只更新内存 <code>Book.offset</code>。复用 E01 的同一通道，避免两套写路径。</div></div>
+    <div class="row"><div class="k">收益</div><div class="v">写盘频率降一个数量级；长播耗电与抖动明显下降。</div></div>
+  </article>
+
+  <article class="card p0">
+    <h3><span class="tag hot">E03</span>词级高亮触发整页重排与整个列表重绑 <span class="eff">M</span></h3>
+    <div class="row"><div class="k">链路</div><div class="v"><code>TtsEngine.onRangeStart:43</code> → <code>ListenService.range():70</code> → <code>publish(false)</code> → <code>MainActivity.onListeningChanged:881</code> → <code>refreshHighlights():580</code>：分页模式走 <code>PagedReaderView.render():167</code> 重建 <code>Spannable</code> + <code>StaticLayout</code>；滚动模式走 <code>readerAdapter.notifyDataSetChanged()</code>。而 <code>onRangeStart</code> 是<b>按词</b>触发的，中文 TTS 约每秒 4–6 次。</div></div>
+    <div class="row"><div class="k">问题</div><div class="v">朗读时每秒 4–6 次整页文字 shaping + 整表重绑，中低端机会直接掉帧。这是"听书时页面发飘"的根因。</div></div>
+    <div class="row"><div class="k">建议</div><div class="v">① 高亮与排版分离：在既有 <code>layout</code> 上叠加绘制矩形（按 <code>getLineForOffset</code> 求行框），不重建 <code>StaticLayout</code>；② 范围回调在 Service 侧合并到 100–150 ms；③ 滚动模式只更新命中行 <code>getChildAt(pos - getFirstVisiblePosition())</code>，不整表刷新。</div></div>
+    <pre><code>// 现在：每个词
+render() -> typography.style(整页) -> new StaticLayout(...) -> invalidate()
+
+// 目标：只画一个矩形
+RectF r = lineRect(layout, listenStart, listenEnd);
+canvas.drawRect(r, highlightPaint);   // layout 不变</code></pre>
+  </article>
+
+  <article class="card p0">
+    <h3><span class="tag hot">E04</span>每算一页都排版 8192 字 <span class="eff">M</span></h3>
+    <div class="row"><div class="k">证据</div><div class="v"><code>PagedReaderView.fitPage():120-132</code>：<code>windowEnd = start + 8192</code>，每次新建 <code>StaticLayout</code>，只取"第一屏放得下的行"，然后整份 layout 丢弃；下一页再从 <code>start</code> 重排。</div></div>
+    <div class="row"><div class="k">问题</div><div class="v">一页 300–600 字，却为它 shaping 8192 字，约 <b>10–20 倍</b>浪费。长章节（4 万字 ≈ 70 页）首次进入或深层跳转时，用户在"正在定位页面…"上的等待基本由这里决定。</div></div>
+    <div class="row"><div class="k">建议</div><div class="v">滑动窗口批量切页：一次 layout 覆盖 8–16 K 字后，用同一个 <code>StaticLayout</code> 连续切出多页（<code>getLineStart/getLineTop</code> 直到高度用尽），窗口耗尽再推进；把 <code>PageIndex.extend()</code> 的 <code>Fitter</code> 从"切一页"扩展为"切一批"。保留代理对边界处理。</div></div>
+    <div class="row"><div class="k">收益</div><div class="v">分页吞吐提升约一个数量级；长章节首次进入从秒级降到百毫秒级。</div></div>
+  </article>
+
+  <article class="card p0">
+    <h3><span class="tag hot">E05</span>四个列表都没有复用 convertView <span class="eff">M</span></h3>
+    <div class="row"><div class="k">证据</div><div class="v">
+      <code>ShelfAdapter:206</code> 每次新建 <code>LinearLayout</code> 子类 + <code>BookCoverView</code> + <code>ShelfTitleView</code> + 徽标 + 进度条，完全忽略 <code>reused</code>；<code>chapters():592</code>、<code>search():646</code>、<code>AppSheet:71</code> 同样每次新建。只有 <code>ReaderAdapter:898</code> 正确复用了 <code>TextView</code>。
+    </div></div>
+    <div class="row"><div class="k">问题</div><div class="v">目录最多 1 万项、搜索 1000 条、书架数百本，滚动时每帧都在建 View 树并触发 measure/layout；书架还叠加自定义封面绘制，单帧成本最高。</div></div>
+    <div class="row"><div class="k">建议</div><div class="v">标准 ViewHolder 复用。书架复用时必须额外处理三件事：清空旧 bitmap（避免串封面）、<code>Motion.reset(tile)</code> 复位按压态、重算选中/置顶徽标。<code>ShelfTitleView</code> 的自适应字号结果按 <code>(title, width)</code> 缓存，避免每次 measure 试 5 个字号。</div></div>
+    <div class="row"><div class="k">收益</div><div class="v">目录与书架帧率提升最明显，内存分配下降、GC 抖动减少。</div></div>
+  </article>
+</section>
+
+<section id="s3">
+  <h2 class="sec"><span class="no">03</span>效率与性能 · P1</h2>
+  <p class="lede">单项收益不大，但都是"每次操作都要付"的固定开销，累计感知明显。</p>
+  <table>
+    <thead>
+      <tr><th>编号</th><th>问题</th><th>证据</th><th>建议</th><th>量</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="id">E06</td><td>页索引只在内存（6 节），<code>showReader</code> 每次新建 view 即清空，改字号/重开书全部重排</td><td><code>PagedReaderView.cache:29</code>、<code>onSizeChanged:83</code>、<code>showReader:436</code></td><td>以 <code>bookId + 排版配置哈希 + 视口宽高 + 章节序号</code> 为键，把 boundaries 存 <code>cacheDir/pages/</code>，LRU 清理。<code>PageIndex</code> 本就是纯数据，天然可序列化</td><td class="c">M</td></tr>
+      <tr><td class="id">E07</td><td>默认封面在 <code>onDraw</code> 里试 5 个字号建 layout、再建第 6 个，每次重绘都执行；Paint/Path 也在 draw 内分配</td><td><code>BookCoverView.onDraw:22-52</code></td><td>在 <code>setBitmap</code>/<code>onSizeChanged</code> 时算一次并缓存 layout、配色、圆角 Path</td><td class="c">S</td></tr>
+      <tr><td class="id">E08</td><td>每个 MotionEvent（含 MOVE）都 <code>removeCallbacks+postDelayed</code>，还每次查 <code>AccessibilityManager</code></td><td><code>dispatchTouchEvent:528-536</code></td><td>只在 DOWN/UP/CANCEL 调度；MOVE 用 100 ms 节流；管理器缓存为字段</td><td class="c">S</td></tr>
+      <tr><td class="id">E09</td><td>每个 <code>onScroll</code> 都做 3 次 <code>String.format</code> + 2 次 setText + 读 prefs</td><td><code>onScroll:467</code> → <code>updateProgress:572</code></td><td>只在章节/页码/百分比整数变化时更新；缓存上次字符串</td><td class="c">S</td></tr>
+      <tr><td class="id">E10</td><td>备份检查把每本书完整解码（含章节正则+行索引），只为比对 <code>text.length()</code></td><td><code>BackupArchive.prepare:68-75</code></td><td>已有 SHA-256 与 manifest 计数校验，长度校验降级为轻量字符计数或跳过；提供"快速/深度"两档</td><td class="c">S</td></tr>
+      <tr><td class="id">E11</td><td>导出备份每本书读两遍：先算 SHA-256，再压缩</td><td><code>export:32-34</code></td><td><code>DigestOutputStream</code> 边压缩边算哈希，一次读盘</td><td class="c">S</td></tr>
+      <tr><td class="id">E12</td><td>单本导入解码两次：<code>add()</code> 一次，<code>openBook→load</code> 再一次</td><td><code>add:81</code>、<code>openBook:427</code>、<code>load:118</code></td><td><code>add()</code> 返回 <code>TextDocument</code> 或 <code>repository.adopt()</code>；<code>TextDocument:38</code> 无 <code>\r</code> 时跳过整本 <code>replace</code></td><td class="c">S</td></tr>
+      <tr><td class="id">E13</td><td>目录搜索每次按键对最多 1 万条标题 <code>toLowerCase()</code></td><td><code>DirectoryRows.rebuild:11</code></td><td>预存小写标题数组；输入 debounce 120 ms</td><td class="c">S</td></tr>
+      <tr><td class="id">E14</td><td>书架每建一次就为每个分类做一次全量过滤+排序</td><td><code>addCategoryChip:190</code></td><td>一次遍历算全部计数，只排当前分类</td><td class="c">S</td></tr>
+      <tr><td class="id">E15</td><td>冷启动在主线程解析 <code>index.json</code></td><td><code>onCreate:93</code> → <code>LibraryStore:40-70</code></td><td>首屏用轻量缓存/骨架先出，索引在 IO 线程加载后刷新</td><td class="c">M</td></tr>
+      <tr><td class="id">E16</td><td>无 <code>onTrimMemory</code>；离开阅读后解码文本仍常驻（12 MB 书约 8–24 MB）</td><td><code>LibraryRepository:14-19</code></td><td>UI_HIDDEN 时清封面缓存并释放非当前书文档；RUNNING_LOW 连缓存一起清</td><td class="c">S</td></tr>
+      <tr><td class="id">E17</td><td>每朗读一句都重建两条通知 + MediaMetadata</td><td><code>publish:161</code>、<code>notification():150</code></td><td>只在状态/章节变化时重建，词级范围更新不重复 notify</td><td class="c">S</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="s4">
+  <h2 class="sec"><span class="no">04</span>正确性与健壮性</h2>
+  <p class="lede">下面这些不会崩，但会让用户觉得"哪里不对"，而且都很便宜。前三条建议随 E 类一起发。</p>
+  <table>
+    <thead><tr><th>编号</th><th>问题</th><th>位置</th><th>表现与建议</th><th>量</th></tr></thead>
+    <tbody>
+      <tr><td class="id">B01</td><td>重复导入时不写入目标分类：<code>add()</code> 命中 <code>existing</code> 就 return，早于分类赋值</td><td><code>LibraryStore.add:80-83</code></td><td>批量导入到"玄幻"，其中 30 本已在书架 → 那 30 本仍留原分类。应在命中重复时仍追加分类并标脏，或在汇总里写明</td><td class="c">S</td></tr>
+      <tr><td class="id">B02</td><td>序章/卷首显示"章节 0/N"</td><td><code>updateProgress:576</code></td><td><code>numberedOrdinalAt</code> 返回"之前有几章"。显示用 <code>Math.max(1, ordinal)</code>，或对序章单独措辞</td><td class="c">S</td></tr>
+      <tr><td class="id">B03</td><td>未播放时点"下一章/上一句"被劫持成"从头播放"</td><td><code>ListenUi.command:68</code></td><td>先 <code>startCurrent()</code>，把原 action 存为 pending，<code>load</code> 完成后执行，别丢用户意图</td><td class="c">S</td></tr>
+      <tr><td class="id">B04</td><td>切换编码时硬编码 <code>getFilesDir()/library</code></td><td><code>changeEncoding:814</code></td><td>绕过 <code>store.file(book)</code>，目录策略一调整就会读错。改用 <code>store.file(b)</code></td><td class="c">S</td></tr>
+      <tr><td class="id">B05</td><td><code>setPositiveButton</code> 对"完成/关闭/知道了/回到书架"且 listener 为 null 时静默丢弃按钮</td><td><code>AppSheet:187</code></td><td>后续 <code>getButton()</code> 会拿到 null。当前调用点恰好安全，属设计陷阱。去掉隐式规则，改为显式 null 才隐藏</td><td class="c">S</td></tr>
+      <tr><td class="id">B06</td><td>正文行每次绑定 <code>new ReaderTypography</code> 两次（8 次 prefs 读取 + 2 次 setJustificationMode）</td><td><code>ReaderAdapter:900,902</code></td><td>每次进入阅读建一个实例复用；同时避免同一行用到两套排版参数</td><td class="c">S</td></tr>
+      <tr><td class="id">B07</td><td>面板打开时自动夜间不生效</td><td><code>refreshAutoTheme:737</code></td><td>要求 <code>hasWindowFocus()</code>，而 <code>AppSheet</code> 是独立 Window。改为"有面板时也允许"或在 <code>onStart</code> 触发一次</td><td class="c">S</td></tr>
+      <tr><td class="id">B08</td><td>错误文案仍是"第一版支持不超过 12 MB"</td><td><code>TextDocument:158</code></td><td>0.9.2 还说第一版。改为"当前版本支持不超过 12 MB 的 TXT"</td><td class="c">S</td></tr>
+      <tr><td class="id">B09</td><td>备份校验 <code>length</code> 单位不一致：字段是字符数，上限却用字节常量</td><td><code>validateMetadata:136</code></td><td>改用 <code>MAX_CHARS</code> 并注明单位，避免放过超大索引</td><td class="c">S</td></tr>
+      <tr><td class="id">B10</td><td><code>SpeechQueue.previous()</code> 历史为空时从本章开头逐块扫到当前位置</td><td><code>SpeechQueue.previous()</code></td><td>4 万字章节连按"上一句"到章首会反复扫全章。用章首兜底或缓存上次边界</td><td class="c">S</td></tr>
+      <tr><td class="id">B11</td><td>封面解码无去重/取消，每次绑定都 <code>io.execute</code> 新任务，且同队列 FIFO</td><td><code>bindCover:277</code></td><td>快速滚动会排入大量重复解码。用 inFlight 去重 + LIFO 队列优先最新可见项</td><td class="c">S</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="s5">
+  <h2 class="sec"><span class="no">05</span>功能改进建议</h2>
+  <p class="lede">此处只列原待办清单之外的新提案；清单已列的（导入预览、TXT 清洗、列表视图、排序、阅读状态、大文件、虚拟分章、自动备份、崩溃日志等）见第 08 节。</p>
+
+  <div class="grid2">
+    <div class="mini">
+      <h4>F01 内置一款开源宋体 <span class="eff">M</span></h4>
+      <p>设置里现在写"宋体字形由手机字体支持情况决定"，而国产 ROM 上 <code>SERIF</code> 常回落到黑体。内置思源宋体/霞鹜文楷子集（7000 常用字 ≈ 3–6 MB），或"内置宋体 / 系统字体"二选一。这是阅读器最核心的"字"，也是与同类拉开差距最直接的一处。</p>
+    </div>
+    <div class="mini">
+      <h4>F02 按书独立记忆排版 <span class="eff">S–M</span></h4>
+      <p>字号、行距、页边距、主题、常亮目前全局共享。给 <code>Book</code> 加可选 <code>typeset</code> 覆盖字段（缺省跟随全局），在"Aa 排版"顶部加"仅对本书生效"。可选字段不破坏 v3 格式与旧备份。</p>
+    </div>
+    <div class="mini">
+      <h4>F03 阅读位置与编码解耦 <span class="eff">M</span></h4>
+      <p>现在 <code>offset</code> 是全文偏移，切编码直接归零并清空书签。改为"章序号 + 章内偏移/比例"，切换时按章节标题+比例重定位，映射失败的书签单独列出而不是整体清空。顺带解决"文本被替换后进度错位"。</p>
+    </div>
+    <div class="mini">
+      <h4>F04 进度条上标书签 <span class="eff">S</span></h4>
+      <p>在 SeekBar 上方叠 2 dp 刻度条，把 <code>active.marks</code> 画成小点，点按直达；长按进度条进"章号跳转"。成本极低，但"这本书我标过哪"变得一眼可见。</p>
+    </div>
+    <div class="mini">
+      <h4>F05 阅读手势可配置 <span class="eff">S–M</span></h4>
+      <p>双指上下滑调亮度（阅读器通用手势，不用退出阅读）；双击中间收藏书签；上/下滑翻页（可关）；音量键长按连续翻页（现在只处理 <code>repeatCount==0</code>）。</p>
+    </div>
+    <div class="mini">
+      <h4>F06 听书：预合成下一句 <span class="eff">M</span></h4>
+      <p>每句都 <code>QUEUE_FLUSH</code> 等引擎起播，句间有 300–800 ms 空白。当前句播放时用 <code>synthesizeToFile</code> 预生成下一句，<code>onDone</code> 后直接播文件，不支持则静默回退。另加"长按选段 → 从这段开始朗读"。</p>
+    </div>
+    <div class="mini">
+      <h4>F07 导入清洗书名 + 编码打分 <span class="eff">M</span></h4>
+      <p>书名现在原样取文件名（<code>[完结]《xxx》(1-1000章)作者：yyy</code>）；编码只在 UTF-8 失败时盲选 GB18030，Big5 会静默乱码。加书名清洗规则 + "常用字命中率"打分，并在预览里显示置信度。</p>
+    </div>
+    <div class="mini">
+      <h4>F08 书架规模化 <span class="eff">M</span></h4>
+      <p>右侧 A–Z / 拼音首字母索引条；长按拖动自定义排序（新增 <code>order</code> 字段，缺省回落最近打开）；多选支持批量导出/批量移出（现在批量只有置顶与分类）。</p>
+    </div>
+    <div class="mini">
+      <h4>F09 搜索增强 <span class="eff">S–M</span></h4>
+      <p>英文忽略大小写（<code>regionMatches(true,…)</code> 保 offset 映射）；结果按章节分组折叠；"仅本章内查找"；最近 10 条搜索历史。跨书搜索仍建议等索引方案。</p>
+    </div>
+    <div class="mini">
+      <h4>F10 EPUB 支持 <span class="eff">L</span></h4>
+      <p>唯一能显著扩大受众、也唯一会动摇"纯 TXT + 极简"定位的功能。最小路径：ZIP → <code>container.xml</code>/<code>.opf</code>/spine → XHTML 转纯文本段落后复用现有分章分页。建议先做产品决策，不排期。</p>
+    </div>
+    <div class="mini">
+      <h4>F11 阅读统计（需决策） <span class="eff">S–M</span></h4>
+      <p>原清单写"不为统计而统计"。折中：只做本地"本周阅读时长 + 读完的书"，不做社交、排行榜、成就。若仍觉得干扰可不做。</p>
+    </div>
+    <div class="mini">
+      <h4>F12 回收站补两个出口 <span class="eff">S</span></h4>
+      <p>现在只能逐本恢复/删除。加一行"共 N 本 · 占用 X MB · 全部清空"。</p>
+    </div>
+  </div>
+</section>
+
+<section id="s6">
+  <h2 class="sec"><span class="no">06</span>工程与可维护性</h2>
+  <table>
+    <thead><tr><th>编号</th><th>问题</th><th>建议</th><th>量</th></tr></thead>
+    <tbody>
+      <tr><td class="id">Q01</td><td><code>MainActivity</code> 968 行，<code>showLibrary</code> 单方法近 60 行；UI 构建、业务、生命周期、导入、备份、听书桥接全在一个类</td><td>按屏拆分 ShelfScreen / ReaderScreen / SettingsSheet / ImportController / BackupController，Activity 只做装配</td><td class="c">L</td></tr>
+      <tr><td class="id">Q02</td><td>全部中文文案硬编码在 Java 里（含 <code>contentDescription</code>）</td><td>抽到 <code>strings.xml</code>，支持校对、翻译与集中修改</td><td class="c">M</td></tr>
+      <tr><td class="id">Q03</td><td>4 处运行期 <code>getIdentifier()</code> 查资源</td><td>改用 <code>R.drawable.*</code>。运行期查表既慢，也让 R8 资源压缩无法安全开启</td><td class="c">S</td></tr>
+      <tr><td class="id">Q04</td><td>仍用 <code>startActivityForResult</code> + 五路分发</td><td>迁移到 <code>ActivityResultContracts</code>，<code>:297-311</code> 能缩短一半</td><td class="c">S</td></tr>
+      <tr><td class="id">Q05</td><td>无 CI，测试靠 PowerShell 脚本手跑</td><td>加 Gradle 任务或 GitHub Actions：Test-Core + lint + assembleRelease</td><td class="c">M</td></tr>
+      <tr><td class="id">Q06</td><td><code>release</code> 仍是 <code>minifyEnabled false</code> + debug 签名</td><td>原清单 Q-01 已列，但它是发布阻塞项：现在不能上架、可反编译、体积偏大</td><td class="c">M</td></tr>
+      <tr><td class="id">Q07</td><td>只有冷启动冒烟，无 UI 流程回归</td><td>把 <code>Test-AndroidStartup.ps1</code> 扩成"导入→翻页→搜索→书签→听书 30 秒→返回"序列</td><td class="c">M</td></tr>
+      <tr><td class="id">Q08</td><td>文档与代码状态轻微漂移</td><td>沿用 0.9.2 FIX 文档的三态写法：已实现 / 已模拟器验证 / 待真机</td><td class="c">S</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="s7">
+  <h2 class="sec"><span class="no">07</span>不建议做的事</h2>
+  <div class="grid2">
+    <div class="note"><strong>不要引入第三方 UI 框架或阅读引擎。</strong>零依赖是资产：无供应链风险、包体小、无网络权限，也是产品叙事核心。</div>
+    <div class="note"><strong>不要做仿真翻页 / 卷曲。</strong>当前 240 ms 平移 + 关闭动画即直达已经够稳；卷曲在低端机上几乎必然掉帧。</div>
+    <div class="note"><strong>不要继续扩分类层级。</strong>多分类 + 置顶 + 最近阅读已把管理成本推到临界点，再加标签组/文件夹嵌套会让设置面板失控。</div>
+    <div class="note warn"><strong>不要做云同步 / 账号。</strong>它需要 INTERNET，会一次性摧毁"无网络权限"这个最强的信任点。</div>
+  </div>
+</section>
+
+<section id="s8">
+  <h2 class="sec"><span class="no">08</span>与原待办清单对照</h2>
+  <p class="lede">复核确认以下项已在 0.9.2 落地，不必再排期；同时说明哪些仍有效、哪些建议调整优先级。</p>
+  <table>
+    <thead><tr><th>已落地</th><th>代码依据</th></tr></thead>
+    <tbody>
+      <tr><td>R-01 亮度 / R-02 对比度 / R-03 字体对齐段距 / R-04 音量翻页</td><td><code>appearance:683</code>、<code>SnowTheme.ACCENT_DARK</code>、<code>ReaderTypography</code>、<code>dispatchKeyEvent:744</code></td></tr>
+      <tr><td>R-05 全屏 / R-06 方向 / R-07 自动夜间 / R-08 左手</td><td><code>EdgeToEdge.immersive</code>、<code>applyReaderWindow:740-742</code>、<code>ReaderPolicy</code>、<code>PagedReaderView:45</code></td></tr>
+      <tr><td>I-01 打开方式 / I-02 文件夹导入 / I-05 继续阅读 / I-06 打开首本 / I-09 重复提示</td><td><code>receiveExternal</code>、<code>importFolder:318</code>、<code>:158-161</code>、<code>:338</code>、<code>:411</code></td></tr>
+      <tr><td>C-01 复制当前句 / C-05 书签增强 / C-06 导航历史</td><td><code>copySentence:791</code>、<code>bookmarks:630</code>、<code>ReaderPolicy.History</code></td></tr>
+      <tr><td>D-01 覆盖恢复 / D-02 回收站 / D-05 可取消</td><td><code>confirmReplace:773</code>、<code>RecycleBin</code>、<code>TaskControl</code></td></tr>
+      <tr><td>S-06 目录搜索/折叠 / M-01~09 动效</td><td><code>DirectoryRows</code>、<code>Motion</code></td></tr>
+    </tbody>
+  </table>
+  <div class="note" style="margin-top:16px">
+    <strong>仍在清单中且依然值得做：</strong>I-04 TXT 清洗、P-01 大文件、P-03 分页预取、S-01/S-02/S-03 书架视图与排序、C-02 持久化高亮、C-04 摘录导出、D-03 自动备份、D-06 崩溃日志、Q-01 release 构建。<br>
+    其中 <b>P-03 与 E04/E06 是同一件事的三个层次</b>（测量批量化 → 索引持久化 → 相邻章节预取），建议一次性设计，不要拆三版。
+  </div>
+  <div class="note warn" style="margin-top:10px">
+    <strong>建议改优先级：</strong>R-09 无障碍审计从 P1 提到 P0——已有大量 <code>contentDescription</code> 与 Heading，说明有意愿；但 <code>PagedReaderView</code> 的整页 setText 与 <code>ShelfAdapter</code> 重建会持续打断 TalkBack 焦点，E03/E05 修完才能稳定验收。
+  </div>
+</section>
+
+<section id="s9">
+  <h2 class="sec"><span class="no">09</span>排期与验收</h2>
+  <ul class="sched">
+    <li><span class="ver">0.9.3</span><div><b>主题：不卡。</b>E01、E02、E03、E05、E07、E08、E09；B01、B02、B03、B04、B06。</div></li>
+    <li><span class="ver alt">0.10</span><div><b>主题：分页。</b>E04、E06、E10、E11、E12、E13、E14、E15、E16；F02、F04、F05。</div></li>
+    <li><span class="ver alt">0.11</span><div><b>主题：字与位置。</b>F01、F03、F06、F07、F08、F09、F12；B07–B11。</div></li>
+    <li><span class="ver dim">1.0</span><div><b>主题：发布。</b>Q01–Q07（release 构建、CI、冒烟、文档对齐）；EPUB 视决策。</div></li>
+  </ul>
+
+  <div class="note" style="margin-top:22px">
+    <strong>如果只能先做三件：</strong><br>
+    ① <b>E01 + E02</b> 把写库移出主线程并合并——改一个类，覆盖所有"卡一下"的体感；<br>
+    ② <b>E03 + E04</b> 高亮与排版解耦、分页批量测量——听书与长章节两个主场景；<br>
+    ③ <b>E05 + E07</b> 列表复用 + 封面绘制缓存——书架、目录、搜索三个列表。<br>
+    第 4、5 件：B01/B03（导入与听书的行为 bug）、F01（内置宋体）。
+  </div>
+
+  <h3 style="font-size:15px;margin:26px 0 0">验收口径（建议写进下版 VALIDATION）</h3>
+  <div class="mini" style="margin-top:10px">
+    <p style="line-height:2">
+      · 500 本书库，滚动停止 / 加书签 / 改名时主线程无 StrictMode 磁盘写告警<br>
+      · 听书连续 10 分钟，无高亮相关的单帧 &gt; 16 ms（Choreographer 打点统计）<br>
+      · 4 万字单章从目录跳到第 60 页：首次 &lt; 500 ms，二次（同排版）&lt; 100 ms<br>
+      · 1 万章目录快速滚到底部，无 <code>GC_FOR_ALLOC</code> 尖峰<br>
+      · 切换编码后进度与书签能回到原章节（允许 ±1 段误差）<br>
+      · release 包：R8 开启、自有签名、无 debug 日志、仍无 INTERNET 权限
+    </p>
+  </div>
+</section>
+
+<footer>
+  <p>一句话总结：功能已经够用了，下一阶段的胜负手是"把高频路径上的浪费砍掉"——先让 500 本书的书架和 4 万字的章节都不卡，再谈内置宋体和 EPUB。</p>
+  <p>复核基线 v0.9.2 / versionCode 13 · 文档生成于 2026-10-09 · 配套 Markdown 版本见 <code>docs/reviews/融雪阅读-改进意见清单-v0.9.2.md</code></p>
+</footer>
+
+</div>
+</body>
+</html>

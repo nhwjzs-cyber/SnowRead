@@ -1,0 +1,13 @@
+{
+  "family": "Rongxue Reader Serif",
+  "upstream": "Adobe Source Han Serif CN Regular 2.003",
+  "url": "https://github.com/adobe-fonts/source-han-serif",
+  "download": "https://raw.githubusercontent.com/adobe-fonts/source-han-serif/release/SubsetOTF/CN/SourceHanSerifCN-Regular.otf",
+  "license": "SIL OFL 1.1",
+  "modified": "GB2312 plus Latin/punctuation subset; reserved font name replaced",
+  "sourceSha256": "3754ea669c530e2473354f8f6d9f79680a44d7e26ec7d00eeabee4a7e0753c5d",
+  "subsetSha256": "72a155136dab216aeb4c3b20ff88ad13cac947faff69d4cbce0af00e39aed7da",
+  "mappedCodepoints": 7812,
+  "bytes": 2815080,
+  "tool": "fonttools 4.68.0"
+}

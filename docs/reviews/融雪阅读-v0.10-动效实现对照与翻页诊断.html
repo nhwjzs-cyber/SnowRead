@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>融雪阅读 v0.10 · 动效实现对照与翻页诊断</title>
+<style>
+:root{--paper:#F8F2E8;--surface:#FFFCF5;--bg:#F3EDE0;--ink:#193E4B;--muted:#506873;
+--accent:#248FA9;--accent-dark:#0F5F73;--accent-soft:#E2F3F6;--border:#D6E2E4;
+--red:#B4453C;--amber:#9A6B1F;--green:#2F7D62;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+font-family:"PingFang SC","Microsoft YaHei","Hiragino Sans GB",system-ui,sans-serif;
+line-height:1.75;font-size:15px;}
+.wrap{max-width:1080px;margin:0 auto;padding:40px 24px 80px}
+header{background:var(--surface);border:1px solid var(--border);border-radius:18px;
+padding:30px 32px;margin-bottom:26px;box-shadow:0 1px 3px rgba(25,62,75,.06)}
+h1{margin:0 0 6px;font-size:26px;letter-spacing:.5px}
+.sub{color:var(--muted);font-size:13px;margin:0}
+.meta{margin-top:16px;padding-top:16px;border-top:1px solid var(--border);
+font-size:12.5px;color:var(--muted);line-height:2}
+.meta code{background:var(--accent-soft);color:var(--accent-dark);padding:2px 6px;border-radius:4px;font-size:12px}
+h2{font-size:19px;margin:38px 0 14px;padding-bottom:9px;border-bottom:2px solid var(--accent-soft)}
+h3{font-size:16px;margin:26px 0 10px;color:var(--accent-dark)}
+h4{font-size:14.5px;margin:18px 0 8px}
+p{margin:10px 0}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;
+padding:20px 24px;margin:16px 0}
+.summary{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--accent);
+border-radius:14px;padding:22px 26px;margin:18px 0}
+.summary strong{color:var(--accent-dark)}
+table{width:100%;border-collapse:collapse;margin:16px 0;background:var(--surface);
+border:1px solid var(--border);border-radius:12px;overflow:hidden;font-size:13.5px}
+th{background:var(--accent-soft);color:var(--accent-dark);text-align:left;
+padding:11px 13px;font-weight:600;font-size:13px;border-bottom:1px solid var(--border)}
+td{padding:11px 13px;border-bottom:1px solid var(--border);vertical-align:top}
+tr:last-child td{border-bottom:none}
+pre{background:#1B3A45;color:#E6F0F3;padding:15px 18px;border-radius:10px;
+overflow-x:auto;font-size:12.5px;line-height:1.65;margin:12px 0;
+font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
+pre .c{color:#7FA8B4}
+pre .w{color:#F0A868}
+pre .g{color:#8FD6A0}
+pre .r{color:#F08A80}
+code{font-family:"SFMono-Regular",Consolas,monospace;font-size:12.5px}
+p code,li code,td code{background:var(--accent-soft);color:var(--accent-dark);
+padding:2px 6px;border-radius:4px}
+.tag{display:inline-block;padding:2px 9px;border-radius:11px;font-size:11.5px;font-weight:600;white-space:nowrap}
+.t-ok{background:#E4F2EA;color:var(--green)}
+.t-half{background:#FBF0DC;color:var(--amber)}
+.t-no{background:#F8E8E6;color:var(--red)}
+.t-bug{background:#F8E8E6;color:var(--red)}
+ul,ol{padding-left:22px}
+li{margin:6px 0}
+.badge{display:inline-block;background:var(--accent);color:#fff;padding:1px 8px;
+border-radius:9px;font-size:11px;font-weight:600;margin-right:6px}
+.note{background:#FBF0DC;border:1px solid #EAD9B4;border-radius:10px;
+padding:14px 18px;margin:14px 0;font-size:13.5px}
+.note.info{background:var(--accent-soft);border-color:#BEE3EC}
+.note.danger{background:#F8E8E6;border-color:#EDC4BF}
+.note b{color:var(--red)}
+.note.info b{color:var(--accent-dark)}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:18px 0}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;text-align:center}
+.stat .n{font-size:27px;font-weight:700;color:var(--accent-dark);line-height:1.2}
+.stat .l{font-size:12px;color:var(--muted);margin-top:4px}
+.issue{background:var(--surface);border:1px solid var(--border);border-radius:14px;
+padding:22px 26px;margin:18px 0;border-left:4px solid var(--red)}
+.issue h3{margin-top:0;color:var(--red)}
+.issue.fix{border-left-color:var(--green)}
+.issue.fix h3{color:var(--green)}
+footer{margin-top:48px;padding-top:22px;border-top:1px solid var(--border);
+color:var(--muted);font-size:12.5px;font-style:italic}
+@media(max-width:760px){.grid3{grid-template-columns:1fr}.wrap{padding:22px 14px 50px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+<h1>融雪阅读 v0.10 · 动效实现对照与翻页问题诊断</h1>
+<p class="sub">对照 29 条 UI/动效清单，核查 GPT 实际实现情况，并定位翻页手感缺陷的代码根因</p>
+<div class="meta">
+<strong>复核对象</strong>　<code>outputs/融雪阅读-v0.10-debug.apk</code>　SHA-256 <code>25a6464c…ad23f35</code>（与校验文件一致）<br>
+<strong>复核源码</strong>　<code>app/src/main/java/com/snowread/app</code>　APK 构建后无源码再修改，产物与源码严格对应<br>
+<strong>对照基准</strong>　<code>docs/reviews/融雪阅读-UI与动效改进清单-v0.9.2.md</code>（动效 10 / 视觉 11 / 细节 8）<br>
+<strong>复核时间</strong>　2026-10-09
+</div>
+</header>
+
+<div class="summary">
+<strong>结论</strong>　GPT 实现了 29 条中的 <strong>12 条</strong>，其中 8 条完整落地、4 条只做了一半。
+值得肯定的是最核心最难的三条都做进去了：<strong>M1 跟手拖动</strong>、<strong>M3+M4 动画缩放与缓存</strong>、<strong>V1 工具栏遮挡</strong>。<br><br>
+但你反馈的三个翻页问题<strong>不是错觉</strong>，是三个真实的代码缺陷 —— 其中两个是我给的方向没写透：位图快照缺 padding 偏移，导致动画帧与实时渲染的文字错位。
+</div>
+
+<div class="grid3">
+<div class="stat"><div class="n">12<span style="font-size:15px">/29</span></div><div class="l">清单条目已实现</div></div>
+<div class="stat"><div class="n" style="color:var(--red)">3</div><div class="l">确认的翻页缺陷</div></div>
+<div class="stat"><div class="n" style="color:var(--green)">~45</div><div class="l">修复所需代码行</div></div>
+</div>
+
+<h2>一、三个问题的根因定位</h2>
+
+<table>
+<thead><tr><th style="width:22%">现象</th><th style="width:38%">根因</th><th style="width:26%">位置</th><th>严重度</th></tr></thead>
+<tbody>
+<tr><td><strong>过渡不平滑</strong></td><td>位图快照缺 padding 偏移，动画帧与实时渲染的文字<strong>错位</strong></td><td><code>PagedReaderView.java:187-197</code></td><td><span class="tag t-bug">★★★ 确定性 bug</span></td></tr>
+<tr><td><strong>动画后一瞬间拉回</strong></td><td>位图动画结束后销毁位图、切回实时渲染，<strong>文字位置突变</strong></td><td><code>PagedReaderView.java:181</code> + <code>:387</code></td><td><span class="tag t-bug">★★★ 确定性 bug</span></td></tr>
+<tr><td><strong>粘滞感</strong></td><td>三重叠加：倍率平方 + 邻页异步预排版竞态 + 阻尼系数过大</td><td>多处</td><td><span class="tag t-half">★★☆ 体验缺陷</span></td></tr>
+</tbody>
+</table>
+
+<div class="note danger">
+<b>额外发现</b>　<code>Motion.scaled()</code> 与系统倍率<b>重复相乘</b>，系统倍率 2× 时实际变成 4×。这在清单里没提，但影响面更大 —— 红米/小米系 ROM 的系统动画倍率常在 1.5×~2×，翻页因此普遍偏慢，本身就是「粘滞」的一大来源。
+</div>
+
+<h2>二、问题一：过渡不平滑</h2>
+
+<div class="issue">
+<h3>根因：位图快照的坐标与实时渲染不一致</h3>
+<p><code>PagedReaderView.java:187-197</code> —— 渲染位图时直接画文本，<strong>没有 translate padding</strong>：</p>
+<pre><span class="c">// renderBitmap</span>
+Bitmap bitmap=Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888);
+Canvas canvas=new Canvas(bitmap);canvas.drawColor(pageBackground);
+page.draw(canvas);              <span class="w">// ← 直接画，没有 translate padding</span>
+<span class="c">// drawPage（实时渲染路径）</span>
+canvas.save();canvas.translate(x,0);canvas.clipRect(0,0,contentWidth(),contentHeight());
+canvas.drawColor(pageBackground);page.draw(canvas);canvas.restore();
+<span class="c">// onDraw 入口</span>
+canvas.clipRect(getPaddingLeft(),...);
+canvas.translate(getPaddingLeft(),getPaddingTop());   <span class="w">// ← 实时路径会平移</span></pre>
+
+<p><strong>为什么这会造成不平滑</strong>　<code>StaticLayout</code> 在 <code>contentWidth()</code> 宽度下排版，文字从 layout 内部 x=0 开始。实时绘制路径在 <code>onDraw</code> 里先 <code>translate(paddingLeft, paddingTop)</code>，文字实际出现在屏幕 <code>paddingLeft</code> 处；而位图路径的位图内文字在 x=0，这张位图又在<strong>已平移过的 canvas</strong> 上绘制。</p>
+<p>结果：<strong>动画期间的文字比静止时整体左移了一个 <code>paddingLeft</code>（通常 20~40dp）</strong>。动画一开始文字向左跳一下，结束又跳回来 —— 而且偏移量恒定，所以整段动画每一帧都在错位的位置上滑动，眼睛对此极其敏感。</p>
+
+<h4>修复</h4>
+<pre>Bitmap bitmap=Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888);
+Canvas canvas=new Canvas(bitmap);
+canvas.drawColor(pageBackground);
+<span class="w">canvas.translate(getPaddingLeft(),getPaddingTop());</span>   <span class="c">// ← 补上这行</span>
+page.draw(canvas);</pre>
+<p class="note info">但仅补这一行还不够 —— 位图的<strong>尺寸本身</strong>也是错的，见下一节。</p>
+</div>
+
+<h2>三、问题二：翻页动画后一瞬间的拉回</h2>
+
+<div class="issue">
+<h3>根因：位图尺寸与绘制坐标系不匹配，动画结束时突变</h3>
+<p>位图尺寸是 <code>contentWidth × contentHeight</code>（<strong>不含 padding</strong>），但 <code>onDraw</code> 里 canvas 已平移过 padding。动画分支 <code>:377-386</code>：</p>
+<pre>}else if(outgoingLayout!=null){
+    float oldX=-slideDirection*width*slideFraction,newX=slideDirection*width*(1-slideFraction);
+    if(outgoingBitmap!=null&amp;&amp;incomingBitmap!=null){
+        canvas.drawBitmap(outgoingBitmap,oldX,0,null);
+        canvas.drawBitmap(incomingBitmap,newX,0,null);
+    }</pre>
+
+<p><strong>完整时序</strong></p>
+<ol>
+<li>动画期间：文字出现在 <code>paddingLeft + 0</code> 处 —— <strong>错位</strong></li>
+<li>动画结束（<code>:181</code>）：<code>outgoingLayout=null; slideFraction=1; recycleBitmaps(); invalidate();</code></li>
+<li>下一帧走 <code>else drawPage(canvas,layout,0)</code> —— <strong>实时渲染</strong>，文字回到 <code>paddingLeft</code> 处 —— 正确</li>
+</ol>
+<p>于是<strong>动画最后一帧与结束后第一帧，文字横向位置差了一个 <code>paddingLeft</code></strong>。这就是你看到的「拉回」—— 一次实打实的 20~40dp 横向跳变。</p>
+
+<h4>修复：位图包含完整 view 区域</h4>
+<pre><span class="c">// renderBitmap：用整个 view 尺寸</span>
+int width=getWidth(),height=getHeight();
+Bitmap bitmap=Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888);
+Canvas canvas=new Canvas(bitmap);
+canvas.drawColor(pageBackground);
+canvas.translate(getPaddingLeft(),getPaddingTop());
+page.draw(canvas);
+
+<span class="c">// onDraw 动画分支：抵消外层平移</span>
+canvas.save();
+canvas.translate(-getPaddingLeft(),-getPaddingTop());
+canvas.drawBitmap(outgoingBitmap,oldX-getPaddingLeft(),-getPaddingTop(),null);
+canvas.drawBitmap(incomingBitmap,newX-getPaddingLeft(),-getPaddingTop(),null);
+canvas.restore();</pre>
+
+<div class="note info">
+<b>更省事的替代方案</b>　若不想动坐标系，<strong>直接回退到位图之前</strong>（删掉 <code>renderBitmap</code>/<code>recycleBitmaps</code>，<code>onDraw</code> 恢复 <code>drawPage(canvas,outgoingLayout,oldX); drawPage(canvas,layout,newX);</code>）。代价是每帧重绘两页文本 —— 但翻页只有 240ms，现代设备完全扛得住。<strong>正确性优先</strong>，这是我会选的方案。
+</div>
+</div>
+
+<h2>四、问题三：粘滞感（四重叠加）</h2>
+
+<div class="issue">
+<h3>原因一 ★★☆：系统倍率被乘了两次</h3>
+<p><code>Motion.java:58-62</code> 的 <code>scaled()</code> 已经乘了一次系统倍率，而 <code>Motion.java:82</code> 把这个结果交给 <code>view.animate().setDuration(actual)</code>。</p>
+<div class="note danger">
+<b>关键事实</b>　<code>ValueAnimator.setDuration()</code> 和 <code>ViewPropertyAnimator.setDuration()</code> 设置的是<b>基础时长</b>，Android 框架在 <code>ValueAnimator.getScaledDuration()</code> 里<b>自己会再乘一次</b>系统 <code>ANIMATOR_DURATION_SCALE</code>。
+</div>
+<table>
+<thead><tr><th>系统倍率</th><th>期望时长</th><th>实际时长</th></tr></thead>
+<tbody>
+<tr><td>1×</td><td>240ms</td><td>240ms ✓</td></tr>
+<tr><td>2×</td><td>480ms</td><td><strong>960ms</strong> ✗</td></tr>
+<tr><td>0.5×</td><td>120ms</td><td><strong>240ms</strong> ✗</td></tr>
+</tbody>
+</table>
+<p><strong>GPT 知道这个问题但没修</strong> —— 它在 <code>融雪阅读-下一阶段开发与验收清单-v0.10.md</code> 的 <strong>R03</strong> 里已明确写出「标准 Animator 路径会重复缩放…系统倍率 2 时约变成 960ms，而预期约为 480ms」，但 v0.10 产物里未做修复。这说明它的清单生成与执行是分离的。</p>
+
+<h4>修复</h4>
+<pre><span class="c">// Motion.java —— 标准 Animator 路径传基础时长，系统自己缩放</span>
+static long scaled(Context context,long duration){
+    float factor=scale(context);
+    if(factor&lt;=0f)return 0L;
+    <span class="w">return duration;</span>   <span class="c">// 不要在这里乘</span>
+}</pre>
+<p><code>Motion.scaled()</code> 当前唯一消费者是 <code>PagedReaderView</code> 的 3 处 <code>ValueAnimator</code>（<code>:176, :243, :313</code>）—— 全是标准路径，直接返回基础时长即可。<strong>但 <code>scale()==0</code> 时禁用动画的判断要保留</strong>，那是用户显式关掉动画的意图。</p>
+</div>
+
+<div class="issue">
+<h3>原因二 ★★☆：邻页异步预排版存在竞态</h3>
+<p><code>PagedReaderView.java:328-346</code> —— 拖动开始时 <code>dragNeighbour</code> 是 <strong>null</strong>，要等 worker 线程排完版才填上。而 <code>worker</code> 是<strong>单线程</strong>执行器，正在处理 <code>navigate()</code> 的分页任务。</p>
+<ol>
+<li>用户开始拖动 → <code>requestDragNeighbour()</code> 提交任务</li>
+<li>worker 还在处理上一个分页任务</li>
+<li>用户手指已移动 100dp，但 <code>dragNeighbour</code> 仍是 null</li>
+<li><code>onDraw:370</code> 的 <code>if(dragNeighbour!=null)</code> 不成立 → <strong>不画邻页</strong>，用户看到「页面被拖走，底下是空白纸色」</li>
+<li>几百毫秒后邻页突然出现 —— 内容「啪」地补上</li>
+</ol>
+<p><strong>这就是粘滞感的直接来源</strong>：手感像页面被橡皮筋拽着、内容追不上手指。且 <code>catch(Exception ignored){}</code> 静默吞异常，排版失败时用户永远看不到邻页，也无从知道发生了什么。</p>
+
+<h4>修复（三选，建议同时做）</h4>
+<ul>
+<li><strong>独立线程</strong>：给邻页预排版单独开一个 executor，不与分页任务抢同一个单线程</li>
+<li><strong>降级绘制</strong>：邻页未就绪时先画纸色 + 一条淡边界阴影，至少是「一页纸」而非空洞</li>
+<li><strong>提前预取</strong>：翻页动画开始时（<code>startTransition</code>）顺手排好下一段，而不是等用户开始拖才排</li>
+</ul>
+</div>
+
+<div class="issue">
+<h3>原因三 ★☆☆：阻尼系数过大</h3>
+<p><code>PagedReaderView.java:267-268</code> 的 <code>0.35f</code> 意味着<strong>在第一页往右拖 100px，页面只动 35px</strong> —— 手指与页面之间明显失配。</p>
+<p>参考值：iOS Books 回弹阻尼约 0.55~0.7，Android ViewPager EdgeEffect 约 0.5。<strong>0.35 偏激进</strong>，建议改 <code>0.55f</code>。</p>
+</div>
+
+<div class="issue">
+<h3>原因四 ★☆☆：拖动阈值偏严</h3>
+<p><code>PagedReaderView.java:290</code> 的 <code>travelled&gt;width*.4f</code> 是 40% 页宽，多数阅读器在 <strong>25%~30%</strong>。阈值过大导致「明明拖了半页却被弹回」，也会被感知为粘滞。</p>
+<p>另外速度阈值 <code>800f*density</code> 的速度值来自 <code>:270-275</code> 的<strong>相邻两帧手工计算</strong>（间隔可能只有 8ms），容易产生噪声 —— 建议改用 <code>VelocityTracker</code>（<code>SheetDragLayout</code> 已正确使用，此处可对齐）。</p>
+</div>
+
+<h2>五、清单实现情况总表</h2>
+
+<h3>完整实现（8 条）</h3>
+<table>
+<thead><tr><th style="width:8%">编号</th><th style="width:26%">内容</th><th style="width:26%">位置</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><span class="badge">M1</span></td><td>翻页跟手拖动</td><td><code>PagedReaderView:74-94, 255-346</code></td><td>onScroll 跟手 + 位移/速度双阈值 + 边界阻尼 + 触觉反馈，结构完整</td></tr>
+<tr><td><span class="badge">M2</span></td><td>进度文字闪烁</td><td><code>Motion.java:108-113</code></td><td>改为「仅首次淡入」。清单里唯一被完全按字面实现的，且修得准</td></tr>
+<tr><td><span class="badge">M3</span></td><td>系统动画缩放</td><td><code>Motion.java:41-62</code></td><td>scale/scaled + 30s TTL + 3× 上限，比建议还多了上限保护</td></tr>
+<tr><td><span class="badge">M4</span></td><td>消除每次动画的跨进程 IPC</td><td><code>Motion.java:35-56</code></td><td>静态缓存 + onResume 刷新，完全按建议实现</td></tr>
+<tr><td><span class="badge">M5</span></td><td>翻页硬件层 + 离屏缓存</td><td><code>PagedReaderView:171-201</code></td><td>位图快照方案。<strong>但有坐标 bug</strong></td></tr>
+<tr><td><span class="badge">M8</span></td><td>第三种缓动 + 过冲曲线</td><td><code>Motion.java:20-22, 128</code></td><td><code>PathInterpolator(.4f,0f,.2f,1f)</code> + <code>OvershootInterpolator(1.06f)</code></td></tr>
+<tr><td><span class="badge">M9</span></td><td>遮罩黑闪</td><td><code>Motion.java:125</code> + <code>AppSheet:115</code></td><td>sheetIn 不再 addFlags，只在 onCreate 设一次 dimAmount=0</td></tr>
+<tr><td><span class="badge">V1</span></td><td>工具栏遮挡章节名和进度</td><td><code>MainActivity:446, 480</code></td><td>章节名进顶栏作副标题、进度进底栏，正文几何未动</td></tr>
+</tbody>
+</table>
+
+<div class="note info">
+<b>值得一提</b>　<code>Motion.java:20</code> 用 <code>PathInterpolator(.4f,0f,.2f,1f)</code> 替代了我原本想用的 <code>FastOutSlowInInterpolator</code> —— 因为<b>该类在 Android 平台不是公开 API</b>，只在 androidx 里，而本项目 <code>android.useAndroidX=false</code> 且零第三方依赖。这是对的做法，说明它读懂了依赖约束。
+</div>
+
+<h3>只做了一半（4 条）</h3>
+<table>
+<thead><tr><th style="width:8%">编号</th><th style="width:46%">做了什么</th><th>缺什么</th></tr></thead>
+<tbody>
+<tr><td><span class="badge">M6</span></td><td>搜索结果用了 <code>Motion.enter(results,CONTENT_NUDGE)</code>（<code>MainActivity:662</code>）</td><td><strong>分类 chip 仍是硬切</strong>：<code>MainActivity:193</code> 仍直接 <code>showLibrary(shelfQuery)</code> → 整树 setContentView 重建。这恰是最高频控件</td></tr>
+<tr><td><span class="badge">M7</span></td><td>无</td><td><code>ReaderControls.java</code> 里 <strong>Motion 出现 0 次</strong>。ToggleRow 仍 invalidate() 瞬移、ChoiceStrip 仍 setBackground 瞬变、ThemeSwatches 描边仍瞬间跳变</td></tr>
+<tr><td><span class="badge">V3</span></td><td>多选底栏、chip、目录项都用了 <code>SnowTheme.ripple</code></td><td><strong>书架卡片本身仍是 GradientDrawable</strong>（<code>MainActivity:216</code>）；按压仍是整卡 scale 0.97，文字仍会发虚</td></tr>
+<tr><td><span class="badge">V4</span></td><td>无</td><td><code>BookCoverView.java:29</code> 色板<strong>一行未改</strong>，仍是五个青绿色</td></tr>
+</tbody>
+</table>
+
+<h3>完全未做（17 条）</h3>
+<p>V2 书架头部折叠 · V5 选中语言统一 · <strong>V6 开关关闭态对比度</strong>（<code>0xFFD0DEDE</code> 未改，仍 1.34:1）· <strong>V7 SeekBar 统一</strong>（仍三种外观，<code>setThumbOffset(dp(12))</code> 仍在）· V8 输入框统一 · V9 目录已读非颜色通道 · V10 logo 绿色 · V11 面板 eyebrow 冗余 · D1 图标描边色 · D2 书架列宽（仍固定 104dp）· D3 TalkBack 重复朗读 · D4 分类数量弱化 · D5「Aa」字号 · <strong>D6 开关无障碍播报</strong> · D7 封面水印 · D8 夜间切换降级</p>
+
+<div class="note">
+<b>分布规律很清楚</b>　动效基础设施层（M2/M3/M4/M8/M9）全做了，具体控件层（M6/M7 + V2~V11 + D1~D8）几乎没做。这符合施工顺序 —— 它先重构了 <code>Motion.java</code> 这类有明确边界的底层，而 29 条里真正消耗工作量的是十几个分散在 4 个文件里的控件级改造。
+</div>
+
+<h2>六、清单外发现</h2>
+
+<table>
+<thead><tr><th style="width:24%">问题</th><th style="width:20%">位置</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><strong>倍率平方</strong></td><td><code>Motion.scaled</code></td><td>见第四节原因一。GPT 已在 R03 记录但未修</td></tr>
+<tr><td><code>edgePaint</code> 成死代码</td><td><code>PagedReaderView:22, 58</code></td><td>已改用 drawBoundary 渐变阴影，edgePaint 定义后再未被使用 —— 改了一半的痕迹</td></tr>
+<tr><td><strong>阴影深度公式写错</strong></td><td><code>PagedReaderView:354</code></td><td><code>float depth=Math.min(24f*density,Math.abs(direction)*.5f+1f)</code>，但 <code>direction</code> 是<b>符号</b>（±1），<code>Math.abs</code> 恒为 1 → <b>depth 恒为 1.5px</b>，渐变几乎不可见。本意应是按页面偏移量计算</td></tr>
+<tr><td><code>SwipeActionRow.settle()</code> 绕过缩放</td><td><code>SwipeActionRow:35</code></td><td>直接用基础时长 → 系统缩放一次，<b>这条路径反而是对的</b>，但与 <code>Motion.to()</code> 行为不一致，修复倍率平方时需一并统一</td></tr>
+<tr><td>无用 import</td><td><code>PagedReaderView:4-5</code></td><td><code>android.provider.Settings</code>、<code>accessibility.*</code> 在 animationsAllowed 委托给 Motion 后已无用</td></tr>
+</tbody>
+</table>
+
+<h2>七、建议修复优先级</h2>
+
+<table>
+<thead><tr><th style="width:10%">优先级</th><th style="width:40%">问题</th><th style="width:12%">修改量</th><th>用户可感知</th></tr></thead>
+<tbody>
+<tr><td><span class="tag t-bug">P0</span></td><td>倍率平方（<code>Motion.scaled</code> 返回基础时长）</td><td>3 行</td><td>★★★ 立刻改善粘滞</td></tr>
+<tr><td><span class="tag t-bug">P0</span></td><td>位图坐标错位（<code>renderBitmap</code> + <code>onDraw</code>）</td><td>6 行</td><td>★★★ 消除跳变与拉回</td></tr>
+<tr><td><span class="tag t-half">P1</span></td><td>邻页预排版竞态（独立线程 + 降级绘制）</td><td>15 行</td><td>★★★ 消除「内容追不上」</td></tr>
+<tr><td><span class="tag t-half">P1</span></td><td>阻尼系数 0.35 → 0.55</td><td>2 行</td><td>★★☆ 跟手</td></tr>
+<tr><td><span class="tag t-half">P1</span></td><td>拖动阈值 40% → 30%</td><td>1 行</td><td>★★☆</td></tr>
+<tr><td><span class="tag t-no">P2</span></td><td>drawBoundary 深度计算</td><td>2 行</td><td>★☆</td></tr>
+<tr><td><span class="tag t-no">P2</span></td><td>速度判定改用 VelocityTracker</td><td>10 行</td><td>★☆</td></tr>
+<tr><td><span class="tag t-no">P2</span></td><td>删除 edgePaint 死代码、清理 import</td><td>3 行</td><td>—</td></tr>
+</tbody>
+</table>
+
+<div class="summary">
+<strong>合计约 45 行改动，即可解决你反馈的全部三个现象。</strong><br><br>
+<strong>方案 A（推荐）</strong>　只修 6 个 P0/P1 项，风险最低，直接消除三个现象。<br>
+<strong>方案 B</strong>　A + 补完 M6/M7/V3/V4，把这轮欠的 4 条半成品补齐。<br>
+<strong>方案 C</strong>　A + 把 29 条全做完 —— 改 5 个文件约 400 行，且与 GPT 下一轮的 MainActivity 改造高度冲突。<br><br>
+<strong>建议先走 A</strong>：你反馈的是<strong>手感问题</strong>，每天都能感知；V2~V11/D 系列是精致度问题，优先级低一档；且 MainActivity 是冲突高发点（GPT 自己在清单里都警告了「不要同时写同一个项目目录」），动得越多后续集成越难。
+</div>
+
+<footer>
+本报告基于 v0.10 产物与源码的静态分析。三个翻页问题的根因均可在代码中定位到具体行，但<strong>尚未在真机上复现验证</strong> —— 建议修复后用同一台设备做前后对比。
+</footer>
+
+</div>
+</body>
+</html>

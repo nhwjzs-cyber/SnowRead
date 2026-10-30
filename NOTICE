@@ -1,0 +1,7 @@
+Required Notice: Copyright (c) 2026 nhwjzs-cyber. SnowRead / 融雪阅读.
+
+Project-owned code is offered under the unmodified PolyForm Noncommercial
+License 1.0.0 in LICENSE. See NONCOMMERCIAL.zh-CN.md for a Chinese explanation.
+Third-party components retain their own licenses:
+- Modified Source Han Serif subset: SIL OFL 1.1; see app/src/main/assets/fonts/.
+- Gradle Wrapper: Apache License 2.0; see META-INF/LICENSE inside the wrapper JAR.
