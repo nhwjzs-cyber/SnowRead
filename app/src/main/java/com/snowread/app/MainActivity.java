@@ -65,7 +65,7 @@ public final class MainActivity extends Activity {
     private final HashSet<String> freshBooks=new HashSet<>();
     private ShelfCategoryDrag shelfDrag;
     private TextView selectionTitle;
-    private FrameLayout readerStage;
+    private ReaderStage readerStage;
     private View readerTopBar,readerBottomBar;
     private final ReaderChrome chrome=new ReaderChrome();
     private final Handler chromeHandler=new Handler(Looper.getMainLooper());
@@ -148,10 +148,11 @@ public final class MainActivity extends Activity {
     }
     private void frame(boolean reading) {
         if(shelfDrag!=null){shelfDrag.dispose();shelfDrag=null;}
+        getWindow().setSoftInputMode(reading?WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING:WindowManager.LayoutParams.SOFT_INPUT_ADJUST_UNSPECIFIED);
         colors(reading);getWindow().setBackgroundDrawable(new ColorDrawable(bg));findViewById(android.R.id.content).setBackgroundColor(bg);root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);
         if(reading){root.setBackgroundColor(bg);setContentView(root);}
         else{FrameLayout scene=new FrameLayout(this);scene.setBackgroundColor(bg);AtmosphereView sky=new AtmosphereView(this,uiDark(),false);sky.setTag("shelf-atmosphere");scene.addView(sky,new FrameLayout.LayoutParams(-1,-1));scene.addView(root,new FrameLayout.LayoutParams(-1,-1));setContentView(scene);}
-        final LinearLayout surface=root;EdgeToEdge.listen(surface,reading,(left,top,right,navigation,keyboard)->surface.setPadding(left,top,right,Math.max(navigation,keyboard)));
+        final LinearLayout surface=root;EdgeToEdge.listen(surface,reading,(left,top,right,navigation,keyboard)->surface.setPadding(left,top,right,reading?navigation:Math.max(navigation,keyboard)));
     }
     private void showLibrary(String query) {
         statsPage=false;statsReturnBook="";
@@ -755,7 +756,7 @@ public final class MainActivity extends Activity {
         importing(()->store.add(TextDocument.readLimited(getAssets().open("sample.txt")),"山间来信 · 示例",null),null);
     }
     private void openBook(LibraryStore.Book book) {
-        if (busy) return;statsPage=false;
+        if (busy) return;statsPage=false;hideShelfKeyboard();View focused=getCurrentFocus();if(focused!=null)focused.clearFocus();
         if(readingStats!=null)readingStats.pulse(false,lastReadingInteraction);savePosition();if(repository!=null&&!repository.listenOwner.isEmpty()&&!repository.owns(book.id)&&listenUi!=null)listenUi.stopPlayback(); active=null; reader=null; pagedReader=null;
         int token=++generation; busy=true;showLoading("正在翻开「"+book.title+"」…");
         io.execute(()-> {
@@ -764,9 +765,11 @@ public final class MainActivity extends Activity {
                 TextDocument loaded=repository.load(book);
                 String converted=ChineseText.convert(getApplicationContext(),loaded.text,book.scriptMode);
                 runOnUiThread(()-> {
-                    hideLoading();busy=false;if (isDestroyed()||token!=generation) return;
+                    Runnable enterReader=()->{hideLoading();busy=false;if (isDestroyed()||token!=generation) return;
                     navigation.clear();capturePage();active=book;book.readingStarted=true;if(book.readingState==ReadingStatus.UNREAD)book.readingState=ReadingStatus.AUTO; document=loaded;readerText=converted; active.length=loaded.text.length(); active.opened=System.currentTimeMillis();prefs.edit().putString("lastBook",book.id).apply();if(loaded.chaptersTruncated)toast("标题超过 1 万个，仅索引前 1 万项；后续正文仍可阅读和搜索");
                     searchTerm="";highlight=-1;listenFollowing=true;showReader(active.offset);revealPage();applyAwake();if(openListenAfterLoad){openListenAfterLoad=false;listenUi.open();}
+                    };
+                    if(loading!=null&&loading.isShowing())loading.dismissThen(enterReader);else enterReader.run();
                 });
             } catch (Exception e) { runOnUiThread(()-> { hideLoading();busy=false;if (!isDestroyed()) {showLibrary("");error("无法打开这本书",e);} }); }
         });
@@ -777,7 +780,7 @@ public final class MainActivity extends Activity {
         chromeHandler.removeCallbacks(chromeTimeout);
         reader=null;pagedReader=null;readerAdapter=null;progress=null;progressLabel=null;restoring=false;
         frame(true);
-        readerStage=new FrameLayout(this);root.addView(readerStage,new LinearLayout.LayoutParams(-1,-1));
+        readerStage=new ReaderStage(this);root.addView(readerStage,new LinearLayout.LayoutParams(-1,-1));
         // Persistent header/footer reserve real space. Overlay controls never resize the text viewport.
         LinearLayout content=column();readerStage.addView(content,new FrameLayout.LayoutParams(-1,-1));
         if(prefs.getBoolean("readerHeader",false)){
@@ -849,7 +852,7 @@ public final class MainActivity extends Activity {
             View item=navButton(action,icon,run);if(action.equals("书签"))item.setTag("reader-bookmark-action");actions.addView(item,new LinearLayout.LayoutParams(0,dp(60),1));
         }
         bottom.addView(actions);readerBottomBar=bottom;FrameLayout.LayoutParams bottomPosition=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);
-        bottomPosition.setMargins(dp(12),0,dp(12),dp(8));readerStage.addView(bottom,bottomPosition);
+        bottomPosition.setMargins(dp(12),0,dp(12),dp(8));readerStage.addView(bottom,bottomPosition);readerStage.controls(top,bottom);
                 followButton=button("回到朗读位置",()->listenRestoreFollow());followButton.setBackground(shape(card,18));FrameLayout.LayoutParams followPosition=new FrameLayout.LayoutParams(-2,dp(44),Gravity.RIGHT|Gravity.TOP);followPosition.setMargins(0,dp(76),dp(16),0);readerStage.addView(followButton,followPosition);followButton.setVisibility(View.GONE);
         lastReadingInteraction=SystemClock.elapsedRealtime();statsPulse();chrome.enter(SystemClock.elapsedRealtime(),hasWindowFocus());scheduleChrome();followingJump=true;jumpTo(offset);followingJump=false;if(listenUi!=null&&listenUi.snapshot()!=null)onListeningChanged(listenUi.snapshot());
         applyReaderWindow();
@@ -864,10 +867,7 @@ public final class MainActivity extends Activity {
     }
     private void applyChromeVisibility() {
         applyReaderWindow();
-        View[] bars={readerTopBar,readerBottomBar};for(int i=0;i<bars.length;i++){View bar=bars[i];if(bar==null)continue;float nudge=i==0?-Motion.NUDGE:Motion.NUDGE;
-            if(chrome.isVisible()){boolean hidden=bar.getVisibility()!=View.VISIBLE||bar.getAlpha()<1;bar.setVisibility(View.VISIBLE);if(hidden)Motion.enter(bar,nudge);else Motion.reset(bar);}
-            else Motion.exit(bar,nudge,Motion.BASE,()->{if(!chrome.isVisible())bar.setVisibility(View.GONE);});
-        }
+        if(readerStage!=null)readerStage.showControls(chrome.isVisible());
     }
     private void scheduleChrome() {
         chromeHandler.removeCallbacks(chromeTimeout);
@@ -1637,7 +1637,7 @@ public final class MainActivity extends Activity {
         Runnable cleanup=()->{if(tree.isAlive()&&observer[0]!=null)tree.removeOnPreDrawListener(observer[0]);if(timeout[0]!=null)old.removeCallbacks(timeout[0]);};
         Runnable release=()->{if(released[0])return;released[0]=true;cleanup.run();if(target!=root||!old.isAttachedToWindow())return;Motion.exit(old,0,Motion.BASE,()->{host.removeView(old);old.setImageDrawable(null);});};
         observer[0]=()->{boolean ready=target.getWidth()>0&&target.getHeight()>0&&!restoring;
-            if(target==root&&active!=null){if(pagedReader!=null)ready&=!pagedReader.isIndexing()&&pagedReader.pageEnd()>0;else if(reader!=null)ready&=reader.getChildCount()>0;}
+            if(target==root&&active!=null){if(readerStage!=null)ready&=readerStage.controlsReady();if(pagedReader!=null)ready&=!pagedReader.isIndexing()&&pagedReader.pageEnd()>0;else if(reader!=null)ready&=reader.getChildCount()>0;}
             if(ready)release.run();return true;};
         timeout[0]=release;tree.addOnPreDrawListener(observer[0]);old.postDelayed(timeout[0],2000);
         old.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener(){public void onViewAttachedToWindow(View v){}public void onViewDetachedFromWindow(View v){released[0]=true;cleanup.run();old.setImageDrawable(null);}});

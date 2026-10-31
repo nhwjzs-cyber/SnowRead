@@ -2,13 +2,15 @@
 
 > 雪渐融，故事正生长。
 
-![版本](https://img.shields.io/badge/版本-v0.16.8%20测试版-blue)
+**更新提示：0.16.8 安装包已撤回，阅读工具栏入场修正见 [v0.16.9 说明](UPDATE-v0.16.9.md)。已安装0.16.8可直接更新，无需卸载。**
+
+![版本](https://img.shields.io/badge/版本-v0.16.9%20测试版-blue)
 ![Android](https://img.shields.io/badge/Android-6.0%20及以上-green)
 ![授权](https://img.shields.io/badge/授权-非商业-orange)
 
 融雪阅读是一款以本地 TXT / EPUB 文字阅读为主的原生 Android 阅读器，由个人开发维护。纸色阅读背景搭配冷色界面，支持分页与滚动两种阅读模式，设计上尽量克制：不设广告，不接入第三方统计与崩溃上报，书籍与阅读记录只保存在设备本地。
 
-当前源码：**v0.16.8（公开测试版）** · Android 6.0 / API 23 及以上 · 应用标识 `com.snowread.app`
+当前源码：**v0.16.9（公开测试版）** · Android 6.0 / API 23 及以上 · 应用标识 `com.snowread.app`
 
 **[前往 Releases 下载](https://github.com/nhwjzs-cyber/SnowRead/releases)**
 
@@ -45,7 +47,7 @@
 
 ## 安装与数据
 
-请在 [Releases](https://github.com/nhwjzs-cyber/SnowRead/releases) 下载 v0.16.8 测试版，安装包文件名为 `SnowRead-v0.16.8-release.apk`；页面中的“隔离测试应用”与“隔离仪器测试”仅用于开发验证。源码目录不存放安装包。
+请在 [Releases](https://github.com/nhwjzs-cyber/SnowRead/releases) 下载 v0.16.9 测试版，安装包文件名为 `SnowRead-v0.16.9-release.apk`；页面中的“隔离测试应用”与“隔离仪器测试”仅用于开发验证。源码目录不存放安装包。
 
 覆盖更新前，建议先在应用内导出书库备份。由原作者签名的发布版可直接覆盖更新；自行编译的版本使用构建者自己的签名，通常无法直接覆盖原作者签名的安装包。
 
@@ -61,7 +63,7 @@
 
 ## 当前状态
 
-v0.16.8 为公开测试版。核心、存储与功能回归通过，发布 APK 的签名、资源表与非调试清单已检查。维护者此前反馈已在多品牌、多安卓版本设备上运行正常；本版新增正文净化与笔记界面用例仅编译，尚未设备执行。EPUB 插图、脚注跳转与跨书笔记仍未实现。发现问题欢迎通过 Issue 反馈。
+v0.16.9 修正阅读工具栏入场时序。0.16.8 APK已撤回，请使用0.16.9覆盖更新。核心、存储与功能回归通过，发布 APK 的签名、资源表与非调试清单已检查。维护者此前反馈已在多品牌、多安卓版本设备上运行正常；本版新增正文净化与笔记界面用例仅编译，尚未设备执行。EPUB 插图、脚注跳转与跨书笔记仍未实现。发现问题欢迎通过 Issue 反馈。
 
 其他存储与界面验证记录见 [VALIDATION.md](VALIDATION.md)。
 

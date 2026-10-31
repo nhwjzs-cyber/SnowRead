@@ -76,8 +76,21 @@ public final class FeatureInstrumentation extends Instrumentation {
         testEpubAndStats(context,store);
         testBookInfoDeletionExport(context,store);
         testCleanupAndNoteSearch(context,store);
+        testReaderEntryPlacement(context,store);
     }
     private int currentReadingOffset()throws Exception{Method method=MainActivity.class.getDeclaredMethod("position");method.setAccessible(true);return (Integer)method.invoke(activity);}
+    private void testReaderEntryPlacement(Context context,LibraryStore store)throws Exception{
+        LibraryStore.Book book=store.add("第一章 初读\n阅读工具栏位置测试正文。\n第二章 再读\n布局稳定后显示。".getBytes(StandardCharsets.UTF_8),"Native entry placement.txt",null);
+        for(boolean paged:new boolean[]{false,true}){
+            ui(()->{if(sheet()!=null)sheet().dismissNow();invoke("leaveReader",new Class<?>[0]);set(activity,"pagedMode",paged);});
+            open(book);await(()->((ReaderStage)field(activity,"readerStage")).controlsReady());
+            ui(()->{ReaderStage stage=(ReaderStage)field(activity,"readerStage");View bottom=(View)field(activity,"readerBottomBar");android.widget.FrameLayout.LayoutParams lp=(android.widget.FrameLayout.LayoutParams)bottom.getLayoutParams();check(bottom.getBottom()==stage.getHeight()-lp.bottomMargin,"first settled toolbar is anchored to bottom in both reading modes");check(bottom.getTranslationY()==0&&bottom.getAlpha()==1,"initial toolbar is not running an entry translation");
+                check((activity.getWindow().getAttributes().softInputMode&WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST)==WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING,"reader cannot inherit keyboard-driven window resizing");
+                if(Build.VERSION.SDK_INT>=30){View root=(View)field(activity,"root");android.view.WindowInsets insets=new android.view.WindowInsets.Builder().setInsets(android.view.WindowInsets.Type.systemBars(),android.graphics.Insets.of(0,24,0,30)).setInsetsIgnoringVisibility(android.view.WindowInsets.Type.systemBars(),android.graphics.Insets.of(0,24,0,30)).setInsets(android.view.WindowInsets.Type.ime(),android.graphics.Insets.of(0,0,0,400)).build();root.dispatchApplyWindowInsets(insets);check(root.getPaddingBottom()==30,"stale keyboard inset cannot lift reader controls into middle");root.requestApplyInsets();}
+                ReaderStage unlaid=new ReaderStage(activity);View top=new View(activity),bar=new View(activity);unlaid.addView(top,new FrameLayout.LayoutParams(-1,56,Gravity.TOP));unlaid.addView(bar,new FrameLayout.LayoutParams(-1,180,Gravity.BOTTOM));unlaid.controls(top,bar);check(!unlaid.controlsReady()&&bar.getVisibility()==View.INVISIBLE,"unlaid bars are measured but never exposed");unlaid.showControls(true);check(bar.getVisibility()==View.INVISIBLE,"focus snapshots cannot reveal bars before layout settles");
+            });
+        }
+    }
     private void testCleanupAndNoteSearch(Context context,LibraryStore store)throws Exception{
         byte[] raw="第一章 雪\n保留这一段文字与笔记。\nhttps://example.org/ad\n错字出现在这里。".getBytes(StandardCharsets.UTF_8);
         LibraryStore.Book book=store.add(raw,"Native cleanup.txt",null);TextDocument original=store.load(book);store.updateNote(book,null,BookNote.create(original,original.text.indexOf("保留"),original.text.indexOf("保留")+6,"HELLO note",1));open(book);
