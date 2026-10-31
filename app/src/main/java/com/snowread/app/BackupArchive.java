@@ -28,7 +28,7 @@ final class BackupArchive {
         byte[] index=store.metadata().toString().getBytes(StandardCharsets.UTF_8);
         if(index.length>MAX_INDEX)throw new IOException("书库记录过大，无法生成这份备份");
         LinkedHashMap<String,File> fonts=PortableFonts.files(store.directory());
-        JSONObject manifest=new JSONObject().put("format","snowread.backup").put("version",!fonts.isEmpty()||(settings!=null&&settings.length>65536)?4:hasEpub(store)?3:2).put("createdAt",System.currentTimeMillis()).put("bookCount",store.books.size());
+        JSONObject manifest=new JSONObject().put("format","snowread.backup").put("version",hasCleanup(store)?5:!fonts.isEmpty()||(settings!=null&&settings.length>65536)?4:hasEpub(store)?3:2).put("createdAt",System.currentTimeMillis()).put("bookCount",store.books.size());
         long total=index.length+(settings==null?0:settings.length);long planned=index.length;for(LibraryStore.Book b:store.books){planned+=store.file(b).length();if(store.cover(b).isFile())planned+=store.cover(b).length();}for(File f:fonts.values())planned+=f.length();if(planned>MAX_TOTAL)throw new IOException("备份解压后最多支持 1 GB");final int expected=(int)Math.max(1,planned);
         try(ZipOutputStream zip=new ZipOutputStream(new BufferedOutputStream(output))) {
             zip.setLevel(1);put(zip,"manifest.json",manifest.toString().getBytes(StandardCharsets.UTF_8));put(zip,"library/index.json",index);
@@ -66,7 +66,7 @@ final class BackupArchive {
             }
             if(!names.contains("manifest.json")||!names.contains("library/index.json"))throw new IOException("未找到完整备份，请选择应用导出的 ZIP 文件");
             JSONObject manifest=new JSONObject(read(new File(home,"manifest.json"),16384));
-            if(!"snowread.backup".equals(manifest.getString("format"))||(manifest.getInt("version")!=1&&manifest.getInt("version")!=2&&manifest.getInt("version")!=3&&manifest.getInt("version")!=4))throw new IOException("不支持这个备份版本，请更新应用后再试");
+            if(!"snowread.backup".equals(manifest.getString("format"))||(manifest.getInt("version")!=1&&manifest.getInt("version")!=2&&manifest.getInt("version")!=3&&manifest.getInt("version")!=4&&manifest.getInt("version")!=5))throw new IOException("不支持这个备份版本，请更新应用后再试");
             JSONObject metadata=new JSONObject(read(new File(home,"library/index.json"),MAX_INDEX));
             validateMetadata(metadata);
             LibraryStore incoming=new LibraryStore(home);
@@ -140,6 +140,7 @@ final class BackupArchive {
             clean(previous);return restored;
         }finally{clean(home);}
     }
+    private static boolean hasCleanup(LibraryStore s){for(LibraryStore.Book b:s.books)if(b.cleanupEnabled||!b.cleanupRules.isEmpty())return true;return false;}
     private static boolean hasEpub(LibraryStore store){for(LibraryStore.Book b:store.books)if(b.epub())return true;return false;}
     private static void validateMetadata(JSONObject root)throws Exception {
         int version=root.getInt("version");if(version!=2&&version!=3)throw new IOException("备份中的书库版本不受支持");

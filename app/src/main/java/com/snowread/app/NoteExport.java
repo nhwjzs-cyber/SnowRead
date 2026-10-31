@@ -9,4 +9,8 @@ final class NoteExport {
             String[] lines=n.quote.split("\\r?\\n",-1);for(String line:lines)out.write("> "+line+"\n");out.write("\n");if(!n.note.isEmpty())out.write(n.note+"\n\n");
         }
     }
+    static void writePlain(Writer out,String title,Collection<BookNote> notes)throws IOException{
+        out.write(title.replace('\n',' ').replace('\r',' ')+" · 阅读笔记\n\n");int i=0;
+        for(BookNote n:notes){out.write((++i)+" · "+(n.style==0?"高亮":"下划线")+" · "+(n.located()?"字符位置 "+n.start:"待定位")+"\n"+n.quote+"\n");if(!n.note.isEmpty())out.write("备注："+n.note+"\n");out.write("\n");}
+    }
 }

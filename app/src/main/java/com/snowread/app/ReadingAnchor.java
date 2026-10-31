@@ -26,6 +26,11 @@ final class ReadingAnchor {
             // No matching heading: accept exact nearby context only. Never invent bookmark positions.
             return context(a,predicted,Math.max(0,predicted-4096),Math.min(doc.text.length(),predicted+4096));
         }
+        int resolveExact(ReadingAnchor a){
+            if(a==null)return -1;ArrayList<Integer> candidates=chapters.get(normal(a.chapter)+"\n"+normal(a.volume));
+            if(candidates!=null&&!candidates.isEmpty()){if(a.occurrence>=candidates.size())return -1;int index=candidates.get(Math.max(0,a.occurrence));TextDocument.Chapter c=doc.chapters.get(index);int end=doc.sectionEnd(index),expected=safe(doc.text,c.offset+(int)Math.round(a.ratio*Math.max(0,end-c.offset-1)));return context(a,expected,c.offset,end);}
+            int predicted=safe(doc.text,(int)Math.round(a.wholeRatio*Math.max(0,doc.text.length()-1)));return context(a,predicted,Math.max(0,predicted-4096),Math.min(doc.text.length(),predicted+4096));
+        }
         private int context(ReadingAnchor a,int expected,int from,int end){if(a.context.length()<5)return -1;int begin=expected-a.contextOffset;if(begin>=from&&begin+a.context.length()<=end&&doc.text.regionMatches(begin,a.context,0,a.context.length()))return safe(doc.text,expected);int hit=doc.text.indexOf(a.context,from);if(hit<0||hit+a.context.length()>end)return -1;int next=doc.text.indexOf(a.context,hit+1);if(next>=0&&next+a.context.length()<=end)return -1;return safe(doc.text,hit+a.contextOffset);}
     }
     static int safe(String text,int at){at=Math.max(0,Math.min(at,Math.max(0,text.length()-1)));if(at>0&&at<text.length()&&Character.isLowSurrogate(text.charAt(at))&&Character.isHighSurrogate(text.charAt(at-1)))at--;return at;}

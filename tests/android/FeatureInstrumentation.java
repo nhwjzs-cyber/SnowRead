@@ -75,8 +75,19 @@ public final class FeatureInstrumentation extends Instrumentation {
         testScriptAndCurl(context,store.find(a.id));
         testEpubAndStats(context,store);
         testBookInfoDeletionExport(context,store);
+        testCleanupAndNoteSearch(context,store);
     }
     private int currentReadingOffset()throws Exception{Method method=MainActivity.class.getDeclaredMethod("position");method.setAccessible(true);return (Integer)method.invoke(activity);}
+    private void testCleanupAndNoteSearch(Context context,LibraryStore store)throws Exception{
+        byte[] raw="第一章 雪\n保留这一段文字与笔记。\nhttps://example.org/ad\n错字出现在这里。".getBytes(StandardCharsets.UTF_8);
+        LibraryStore.Book book=store.add(raw,"Native cleanup.txt",null);TextDocument original=store.load(book);store.updateNote(book,null,BookNote.create(original,original.text.indexOf("保留"),original.text.indexOf("保留")+6,"HELLO note",1));open(book);
+        ui(()->{invoke("cleanupSheet",new Class<?>[]{LibraryStore.Book.class},book);for(View v:views(sheet().getWindow().getDecorView()))if(v instanceof ToggleRow)((ToggleRow)v).checked(true);EditText rules=sheet().getWindow().getDecorView().findViewWithTag("cleanup-rules");rules.setText("错字 => 正字");sheet().getButton(AppSheet.BUTTON_POSITIVE).performClick();});
+        await(()->!(Boolean)field(activity,"busy")&&sheet()!=null&&text(sheet(),"净化预览")!=null);
+        ui(()->{check(!book.cleanupEnabled,"preview does not save cleanup metadata");sheet().getButton(AppSheet.BUTTON_POSITIVE).performClick();});
+        await(()->!(Boolean)field(activity,"busy")&&book.cleanupEnabled&&((TextDocument)field(activity,"document")).text.contains("正字"));
+        check(Arrays.equals(raw,TextDocument.readLimited(new FileInputStream(store.file(book)))),"cleanup never overwrites original source");
+        ui(()->{invoke("notes",new Class<?>[0]);EditText search=sheet().getWindow().getDecorView().findViewWithTag("notes-search");ListView results=sheet().getWindow().getDecorView().findViewWithTag("notes-results");search.setText("hello");check(results.getAdapter().getCount()==1,"note search matches remark ignoring case");search.setText("no matching note");check(results.getAdapter().getCount()==0,"note search empty state has no stale results");sheet().dismiss();});
+    }
     private void testBookInfoDeletionExport(Context context,LibraryStore store)throws Exception{
         byte[] bytes="第一章 新雪\n这是一段用于检查划线删除的正文。\n第二章 春来\n书籍备注不会写入正文。".getBytes(StandardCharsets.UTF_8);
         LibraryStore.Book book=store.add(bytes,"Native memo status.txt",null);TextDocument doc=store.load(book);book.offset=6;BookNote note=BookNote.create(doc,0,4,"仅本机笔记",1);store.updateNote(book,null,note);

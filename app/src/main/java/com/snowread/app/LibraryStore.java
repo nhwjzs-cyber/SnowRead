@@ -22,6 +22,7 @@ final class LibraryStore {
         final ArrayList<ReadingAnchor.Unmapped> unmappedMarks=new ArrayList<>();
         String sourceName="",encodingConfidence="",format="txt",memo="";
         boolean epub(){return "epub".equals(format);}
+        boolean cleanupEnabled;String cleanupRules="";
         int chapterRule,scriptMode;
         Book(String id, String title, String encoding, int length) {
             this.id=id; this.title=title; this.encoding=encoding; this.length=length;
@@ -135,6 +136,7 @@ final class LibraryStore {
     TextDocument load(Book book) throws Exception {
         if(book.epub())return EpubDocument.parse(TextDocument.readLimited(new FileInputStream(file(book)))).document;
         TextDocument doc=TextDocument.decode(TextDocument.readLimited(new FileInputStream(file(book))),book.encoding);
+        if(book.cleanupEnabled)doc=new TextDocument(TextCleanup.apply(doc.text,book.cleanupRules).text,doc.encoding,book.chapterRule);
         if(book.chapterRule!=ChapterRule.AUTO){
             TextDocument ruled=new TextDocument(doc.text,doc.encoding,book.chapterRule);
             ruled.encodingConfidence=doc.encodingConfidence;
@@ -179,8 +181,14 @@ final class LibraryStore {
             if(replacement!=null){if(!replacement.valid(book.length)||book.annotations.size()>=BookNote.MAX_COUNT)throw new IOException("笔记无效或超过每本5000条限制");book.annotations.add(replacement);}save();
         }catch(Exception e){book.annotations.clear();book.annotations.addAll(before);throw e;}
     }
+    synchronized void cleanup(Book b,boolean enabled,String rules,TextDocument doc,PositionMigration plan)throws Exception{
+        requireNoBatch();if(find(b.id)!=b||b.epub())throw new IOException("仅支持当前书架中的 TXT");TextCleanup.parse(rules);
+        boolean old=b.cleanupEnabled;String previous=b.cleanupRules;b.cleanupEnabled=enabled;b.cleanupRules=rules;
+        try{reencode(b,doc,plan);}catch(Exception e){b.cleanupEnabled=old;b.cleanupRules=previous;throw e;}
+    }
     synchronized void reencode(Book b,TextDocument doc,PositionMigration plan)throws Exception{if(b.epub())throw new IOException("EPUB 不支持切换 TXT 编码");requireNoBatch();Book before=snapshot(b);migration(b,doc,plan);try{save();}catch(Exception e){b.encoding=before.encoding;b.length=before.length;b.offset=before.offset;b.marks.clear();b.marks.addAll(before.marks);b.markNotes.clear();b.markNotes.putAll(before.markNotes);b.markAnchors.clear();b.unmappedMarks.clear();BookExtras.copy(before,b);throw e;}}
     synchronized Book replaceContent(Book old,byte[] bytes,String source,TextDocument doc,PositionMigration plan)throws Exception{
+        if(old.cleanupEnabled)throw new IOException("请先关闭正文净化再替换正文");
         if(old.epub())throw new IOException("EPUB 暂不支持替换 TXT 正文");
         requireNoBatch();if(find(old.id)!=old)throw new IOException("这本书已不在书架中");byte[] digest=MessageDigest.getInstance("SHA-256").digest(bytes);StringBuilder hex=new StringBuilder();for(byte n:digest)hex.append(String.format(Locale.US,"%02x",n&255));String id=hex.toString();
         if(id.equals(old.id)){reencode(old,doc,plan);return old;}if(find(id)!=null)throw new IOException("所选正文已在书架中，为保留两本记录，本次未替换");

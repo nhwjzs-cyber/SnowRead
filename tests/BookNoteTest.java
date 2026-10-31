@@ -9,6 +9,8 @@ public final class BookNoteTest {
   int emoji=body.indexOf("🌱");BookNote pair=BookNote.create(doc,emoji+1,emoji+1,"",0);check(pair.quote.equals("🌱")&&pair.end-pair.start==2);
   BookNote invalid=new BookNote("../bad",n.start,n.end,n.quote,n.note,0,n.created,n.beginAnchor,n.endAnchor);check(!invalid.valid(body.length()));
   StringWriter out=new StringWriter();NoteExport.write(out,"春雪",Arrays.asList(n,missing));check(out.toString().contains("待定位")&&out.toString().contains("> "+n.quote)&&out.toString().contains("我的想法"));
+  check(NoteQuery.find(Arrays.asList(n,missing),"我的想法",0).size()==2);check(NoteQuery.find(Arrays.asList(n,missing),"",3).size()==1);check(NoteQuery.find(Arrays.asList(n,missing),"",1).isEmpty());
+  check(NoteQuery.find(Collections.singleton(n.edit("HeLLo WORLD",1)),"hello",1).size()==1);check(NoteQuery.find(Collections.singleton(n),"不存在",0).isEmpty());StringWriter plain=new StringWriter();NoteExport.writePlain(plain,"春雪",Arrays.asList(n,missing));check(plain.toString().contains("备注：我的想法")&&plain.toString().contains("待定位"));
   System.out.println("BookNoteTest: "+checks+" checks passed");
  }
 }

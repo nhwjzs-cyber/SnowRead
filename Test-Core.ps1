@@ -8,6 +8,7 @@ $sourceRoot = Join-Path $projectRoot 'app\src\main\java\com\snowread\app'
 $testSources = @(
     (Join-Path $projectRoot 'tests\ReadingStatusTest.java'),
     (Join-Path $projectRoot 'tests\EpubExportTest.java'),
+    (Join-Path $sourceRoot 'TextCleanup.java'),
     (Join-Path $sourceRoot 'ReadingStatus.java'),
     (Join-Path $sourceRoot 'EpubExport.java'),
     (Join-Path $projectRoot 'tests\EpubDocumentTest.java'),
@@ -24,6 +25,7 @@ $testSources = @(
     (Join-Path $sourceRoot 'PrivacyPolicy.java'),
     (Join-Path $projectRoot 'tests\PrivacyPolicyTest.java'),
     (Join-Path $sourceRoot 'NoteExport.java'),
+    (Join-Path $sourceRoot 'NoteQuery.java'),
     (Join-Path $sourceRoot 'LanTransferServer.java'),
     (Join-Path $projectRoot 'tests\BookNoteTest.java'),
     (Join-Path $projectRoot 'tests\LanTransferServerTest.java'),

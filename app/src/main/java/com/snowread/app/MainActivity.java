@@ -22,7 +22,7 @@ public final class MainActivity extends Activity {
     private static final int CREATE_EPUB=51,PICK_REPLACE=47,PICK_FOLDER=46,PICK_TXT=41,PICK_COVER=42,CREATE_BACKUP=43,PICK_BACKUP=44,EXPORT_TXT=45,CREATE_EXPORT=48,PICK_FONT=49,EXPORT_NOTES=50;
     private interface FontChoice {void choose(String id);}
     private FontChoice pendingFontChoice;
-    private ArrayList<BookNote> pendingNoteExport;private String pendingNoteTitle;
+    private boolean pendingNotePlain;private ArrayList<BookNote> pendingNoteExport;private String pendingNoteTitle;
     private volatile LanTransferServer lanSession;private int lanGeneration;private boolean lanStarting;private volatile boolean lanLibraryDirty;
 
     private ReadingStats readingStats;private boolean statsResumed;private long lastReadingInteraction=SystemClock.elapsedRealtime();
@@ -1262,7 +1262,7 @@ public final class MainActivity extends Activity {
         boolean searchBack=searchSession!=null&&document==searchSessionDoc&&!searchSession.hits.isEmpty();int s=searchBack?1:0;
         ArrayList<String> options=new ArrayList<>(Arrays.asList("上一章","下一章","输入章号跳转"));ArrayList<String> hints=new ArrayList<>(Arrays.asList("跳到上一章开头","跳到下一章开头","直接输入编号跳到任意一章"));
         if(searchBack){options.add("回到搜索结果");hints.add("重新打开上次搜索 · "+searchSession.hits.size()+" 处命中");}
-        options.addAll(Arrays.asList("阅读设置","切换编码","听书","返回上一位置","选段摘录／笔记","笔记与划线"));hints.addAll(Arrays.asList("字号、行距、边距与阅读主题","乱码时换一种编码，进度自动映射","朗读本书，支持后台与锁屏控制","回到刚才离开的位置","选择文字、复制、划线或写笔记","查看、修改和导出本书笔记"));
+        options.addAll(Arrays.asList("阅读设置","切换编码","听书","返回上一位置","选段摘录／笔记","笔记与划线","正文净化"));hints.addAll(Arrays.asList("字号、行距、边距与阅读主题","乱码时换一种编码，进度自动映射","朗读本书，支持后台与锁屏控制","回到刚才离开的位置","选择文字、复制、划线或写笔记","查看、修改和导出本书笔记","本地规则、处理预览与恢复原文（TXT）"));
         dialog().setSnowflakes(true).setTitle(active.title).setItemHints(hints.toArray(new String[0])).setItems(options.toArray(new String[0]),(d,w)-> {
             int offset=position();
             if(w==0) {
@@ -1278,7 +1278,7 @@ public final class MainActivity extends Activity {
             if(w==2) chapterJump();
             if(w==2+s&&searchBack){searchTerm=searchSessionTerm;search();return;}
             if(w==3+s) appearance();
-            if(w==4+s){if(active.epub())toast("EPUB 编码由书籍定义，无需切换");else pickEncoding(enc->changeEncoding(active,enc));}if(w==5+s)listenUi.open();if(w==6+s){int previous=navigation.pop();if(previous>=0)jumpTo(previous);else toast("还没有跳转历史");}if(w==7+s)copySentence(position());if(w==8+s)notes();
+            if(w==4+s){if(active.epub())toast("EPUB 编码由书籍定义，无需切换");else pickEncoding(enc->changeEncoding(active,enc));}if(w==5+s)listenUi.open();if(w==6+s){int previous=navigation.pop();if(previous>=0)jumpTo(previous);else toast("还没有跳转历史");}if(w==7+s)copySentence(position());if(w==8+s)notes();if(w==9+s)cleanupSheet(active);
         }).setNegativeButton("关闭",null).show();
     }
     private String clockText(int minutes){return String.format(Locale.CHINA,"%02d:%02d",minutes/60,minutes%60);}
@@ -1374,9 +1374,22 @@ public final class MainActivity extends Activity {
         AppSheet excerpt=dialog().setTitle("选段摘录").setView(excerptPanel).setPositiveButton("复制句子",(d,w)->{((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("融雪阅读摘录",value));toast("已复制");}).setNeutralButton("加书签备注",(d,w)->editBookmark(offset)).setNegativeButton("从选中处开始朗读",(d,w)->{}).show();annotate.setOnClickListener(v->{int a=preview.getSelectionStart(),b=preview.getSelectionEnd();int from=a>=0&&b>=0&&a!=b?Math.min(a,b):0,to=a>=0&&b>=0&&a!=b?Math.max(a,b):value.length();excerpt.dismissThen(()->editNote(null,offset+from,offset+to));});excerpt.getButton(AppSheet.BUTTON_NEGATIVE).setOnClickListener(v->{int selectionStart=android.text.Selection.getSelectionStart(preview.getText()),selectionEnd=android.text.Selection.getSelectionEnd(preview.getText());int begin=offset+Math.max(0,Math.min(selectionStart,selectionEnd));excerpt.dismissThen(()->listenUi.startAt(begin));});
     }
     private void notes(){
-        if(active==null||document==null)return;final LibraryStore.Book book=active;ArrayList<BookNote> list=new ArrayList<>(book.annotations);Collections.sort(list,(a,b)->{if(a.located()!=b.located())return a.located()?-1:1;return a.located()?Integer.compare(a.start,b.start):Long.compare(a.created,b.created);});
-        String[] labels=new String[list.size()];for(int i=0;i<list.size();i++){BookNote n=list.get(i);labels[i]=(n.located()?document.readingTitle(n.start):"待定位")+" · "+(n.style==0?"高亮":"划线")+"\n"+n.quote.substring(0,Math.min(90,n.quote.length())).replace('\n',' ')+(n.note.isEmpty()?"":"\n"+n.note.substring(0,Math.min(80,n.note.length())));}
-        dialog().setTitle("笔记与划线 · "+list.size()).setMessage(list.isEmpty()?"长按正文打开摘录，选择文字后添加高亮、划线或笔记。":"待定位的原文与笔记会保留，可重新指定位置。").setItems(labels,(d,w)->{if(active==book)noteDetail(list.get(w));}).setPositiveButton("选段添加",(d,w)->copySentence(position())).setNeutralButton("导出笔记",(d,w)->{if(list.isEmpty()){toast("本书还没有笔记");return;}pendingNoteExport=list;pendingNoteTitle=book.title;Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("text/markdown").putExtra(Intent.EXTRA_TITLE,book.title.replaceAll("[\\\\/:*?\"<>|]","_")+"-笔记.md");launchPicker(intent,EXPORT_NOTES);}).show();
+        if(active==null||document==null)return;final LibraryStore.Book book=active;final TextDocument doc=document;
+        LinearLayout header=column();EditText query=new EditText(uiContext());query.setTag("notes-search");query.setSingleLine(true);query.setHint("搜索摘录或备注");query.setFilters(new InputFilter[]{new InputFilter.LengthFilter(200)});header.addView(query);
+        ChoiceStrip filter=new ChoiceStrip(uiContext(),new String[]{"全部","划线","高亮","待定位"},0,uiDark());header.addView(filter);TextView count=text("",12,muted);header.addView(count);
+        ArrayList<BookNote> visible=new ArrayList<>();ListView results=new ListView(uiContext());results.setTag("notes-results");results.setDivider(null);results.setBackgroundColor(Color.TRANSPARENT);
+        BaseAdapter adapter=new BaseAdapter(){public int getCount(){return visible.size();}public Object getItem(int p){return visible.get(p);}public long getItemId(int p){return p;}public View getView(int p,View reuse,ViewGroup parent){BookNote n=visible.get(p);TextView item=text((n.located()?doc.readingTitle(n.start):"待定位")+" · "+(n.style==0?"高亮":"划线")+"\n"+n.quote.substring(0,Math.min(90,n.quote.length())).replace('\n',' ')+(n.note.isEmpty()?"":"\n备注："+n.note.substring(0,Math.min(80,n.note.length()))),14,ink);item.setPadding(dp(12),dp(12),dp(12),dp(12));item.setMaxLines(5);item.setEllipsize(TextUtils.TruncateAt.END);item.setBackground(SnowTheme.ripple(Color.TRANSPARENT,dp(12),0x20248FA9));return item;}};
+        results.setAdapter(adapter);Runnable refresh=()->{visible.clear();visible.addAll(NoteQuery.find(book.annotations,query.getText().toString(),filter.selected()));adapter.notifyDataSetChanged();count.setText(visible.isEmpty()?"没有匹配记录；可调整搜索或筛选。":"显示 "+visible.size()+" / "+book.annotations.size()+" 条 · 点击查看与管理");};
+        filter.onChanged(refresh);query.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence t,int st,int c,int a){}public void onTextChanged(CharSequence t,int st,int before,int count){refresh.run();}public void afterTextChanged(Editable e){}});
+        AppSheet sheet=dialog().setTitle("笔记与划线").setHeaderView(header).setFixedView(results).setPositiveButton("选段添加",(d,w)->{if(active==book)copySentence(position());}).setNeutralButton("导出当前结果",(d,w)->chooseNoteExport(book.title,new ArrayList<>(visible))).show();
+        results.setOnItemClickListener((parent,v,p,id)->{BookNote selected=visible.get(p);sheet.dismissThen(()->{if(active==book)noteDetail(selected);});});refresh.run();
+    }
+    private void chooseNoteExport(String title,ArrayList<BookNote> notes){
+        if(notes.isEmpty()){toast("没有可导出的笔记");return;}
+        dialog().setTitle("导出 "+notes.size()+" 条笔记").setItems(new String[]{"Markdown（.md）","纯文本（.txt）"},(d,w)->{
+            pendingNoteExport=notes;pendingNoteTitle=title;pendingNotePlain=w==1;
+            Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(w==1?"text/plain":"text/markdown").putExtra(Intent.EXTRA_TITLE,title.replaceAll("[\\\\/:*?\"<>|]","_")+"-笔记"+(w==1?".txt":".md"));launchPicker(intent,EXPORT_NOTES);
+        }).show();
     }
     private void noteDetail(BookNote n){
         if(active==null||document==null)return;final LibraryStore.Book book=active;
@@ -1419,7 +1432,7 @@ public final class MainActivity extends Activity {
         }catch(Exception e){runOnUiThread(()->{busy=false;if(isDestroyed())return;if(sheet!=null&&sheet.isShowing())sheet.getButton(AppSheet.BUTTON_POSITIVE).setEnabled(true);error("笔记未保存，原记录保留",e);});}});
     }
     private void finishNoteExport(int result,Intent data){
-        final ArrayList<BookNote> list=pendingNoteExport;final String title=pendingNoteTitle;pendingNoteExport=null;pendingNoteTitle=null;if(result!=RESULT_OK||data==null||data.getData()==null||list==null)return;final Uri uri=data.getData();io.execute(()->{try(OutputStream out=getContentResolver().openOutputStream(uri,"wt")){if(out==null)throw new IOException("无法写入所选位置");Writer writer=new BufferedWriter(new OutputStreamWriter(out,"UTF-8"));NoteExport.write(writer,title,list);writer.flush();runOnUiThread(()->{if(!isDestroyed())toast("笔记已导出");});}catch(Exception e){runOnUiThread(()->{if(!isDestroyed())error("导出未完成，所选位置可能含不完整文件，请重新导出",e);});}});
+        final ArrayList<BookNote> list=pendingNoteExport;final String title=pendingNoteTitle;final boolean plain=pendingNotePlain;pendingNotePlain=false;pendingNoteExport=null;pendingNoteTitle=null;if(result!=RESULT_OK||data==null||data.getData()==null||list==null)return;final Uri uri=data.getData();io.execute(()->{try(OutputStream out=getContentResolver().openOutputStream(uri,"wt")){if(out==null)throw new IOException("无法写入所选位置");Writer writer=new BufferedWriter(new OutputStreamWriter(out,"UTF-8"));if(plain)NoteExport.writePlain(writer,title,list);else NoteExport.write(writer,title,list);writer.flush();runOnUiThread(()->{if(!isDestroyed())toast("笔记已导出");});}catch(Exception e){runOnUiThread(()->{if(!isDestroyed())error("导出未完成，所选位置可能含不完整文件，请重新导出",e);});}});
     }
     private java.net.InetAddress lanAddress()throws IOException{
         android.net.ConnectivityManager cm=(android.net.ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);android.net.Network network=cm.getActiveNetwork();android.net.NetworkCapabilities caps=network==null?null:cm.getNetworkCapabilities(network);if(caps==null||caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN)||(!caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)&&!caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET)))throw new IOException("请连接与电脑相同的 Wi-Fi，并暂时关闭 VPN");android.net.LinkProperties links=cm.getLinkProperties(network);if(links!=null)for(android.net.LinkAddress a:links.getLinkAddresses())if(a.getAddress() instanceof java.net.Inet4Address&&a.getAddress().isSiteLocalAddress())return a.getAddress();throw new IOException("未找到可用的局域网 IPv4 地址，请检查 Wi-Fi");
@@ -1455,7 +1468,7 @@ public final class MainActivity extends Activity {
             }catch(Exception e){if(archived!=null)try{recycleBin.delete(archived);}catch(Exception ignored){}runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())error("没有保存成功，原记录保留",e);});}});
         }).show();
     }
-    private void chooseReplacement(LibraryStore.Book book){if(book.epub()){toast("EPUB 暂不支持替换正文，请导入为新书");return;}if(busy)return;pendingReplaceId=book.id;Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*").putExtra(Intent.EXTRA_LOCAL_ONLY,true);launchPicker(pick,PICK_REPLACE);}
+    private void chooseReplacement(LibraryStore.Book book){if(book.cleanupEnabled){toast("请先在正文净化中关闭净化并应用，再替换正文");return;}if(book.epub()){toast("EPUB 暂不支持替换正文，请导入为新书");return;}if(busy)return;pendingReplaceId=book.id;Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*").putExtra(Intent.EXTRA_LOCAL_ONLY,true);launchPicker(pick,PICK_REPLACE);}
     private void readReplacement(Uri uri){String id=pendingReplaceId;pendingReplaceId=null;LibraryStore.Book book=store.find(id);if(book==null||busy)return;if(listenUi!=null)listenUi.stopIfBook(book.id);savePosition();busy=true;showLoading("正在比较新旧正文…");io.execute(()->{try{String filename=displayName(uri);if(!filename.toLowerCase(Locale.ROOT).endsWith(".txt"))throw new IOException("请选择 TXT 文件");byte[] bytes=TextDocument.readLimited(getContentResolver().openInputStream(uri));TextDocument old=repository.load(book),decoded=TextDocument.decode(bytes,null);PositionMigration plan=new PositionMigration(old,decoded,book.offset,book.anchor,book.marks,book.markNotes,book.markAnchors,book.unmappedMarks);runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())showMigration(book,decoded,plan,bytes,filename);});}catch(Exception e){runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())error("新正文无法读取，原书未变更",e);});}});}
     private void commitImport(byte[] bytes,String filename,String title,String category,TextDocument doc){importing(()->{LibraryStore.Book book=store.addPrepared(bytes,filename,title,doc.encoding,category,doc);if(book.encoding.equals(doc.encoding)&&book.length==doc.text.length())repository.adopt(book,doc);return book;},null);}
     private void importPreview(byte[] bytes,String filename,String title,String category,TextDocument doc){
@@ -1474,6 +1487,7 @@ public final class MainActivity extends Activity {
             .setItems(encodings,(d,w)->action.choose(encodings[w])).setNegativeButton("取消",null).show();
     }
     private void changeEncoding(LibraryStore.Book book,String encoding){
+        if(book.cleanupEnabled){toast("请先关闭正文净化并应用，再切换编码");return;}
         if(book.epub()){toast("EPUB 使用内置编码，不需要手动切换");return;}
         savePosition();if(busy)return;if(listenUi!=null)listenUi.stopIfBook(book.id);busy=true;showLoading("正在映射原阅读位置和书签…");io.execute(()->{try{TextDocument old=repository.load(book);TextDocument decoded=TextDocument.decode(TextDocument.readLimited(new FileInputStream(store.file(book))),encoding);if(book.chapterRule!=ChapterRule.AUTO){TextDocument ruled=new TextDocument(decoded.text,decoded.encoding,book.chapterRule);ruled.encodingConfidence=decoded.encodingConfidence;decoded=ruled;}final TextDocument mapped=decoded;PositionMigration plan=new PositionMigration(old,mapped,book.offset,book.anchor,book.marks,book.markNotes,book.markAnchors,book.unmappedMarks);runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())showMigration(book,mapped,plan,null,null);});}catch(Exception e){runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())error("编码切换失败，原记录保留",e);});}});
     }
@@ -1520,6 +1534,7 @@ public final class MainActivity extends Activity {
         coverInfo.body.addView(button("恢复默认封面",first(handle,()->{covers.remove(b.id);coverCache.remove(b.id);showLibrary(shelfQuery);toast("已恢复默认封面");})));
         coverInfo.body.addView(button("恢复为导入文件名",first(handle,()->{if(b.sourceName.isEmpty()){toast("这本旧书未记录导入文件名");return;}synchronized(store){String old=b.title;b.title=TitleCleaner.stem(b.sourceName);if(b.title.length()>240)b.title=b.title.substring(0,240);try{store.save();showLibrary(shelfQuery);}catch(Exception e){b.title=old;error("书名未保存",e);}}})));
         SettingsSection contentInfo=new SettingsSection(uiContext(),"book-content","正文与编码","切换编码 · 替换正文 · 导出",uiDark());
+        if(!b.epub())contentInfo.body.addView(button("正文净化"+(b.cleanupEnabled?" · 已启用":""),first(handle,()->cleanupSheet(b))));
         if(!b.epub())contentInfo.body.addView(button("切换编码",first(handle,()->pickEncoding(enc->changeEncoding(b,enc)))));
         if(!b.epub())contentInfo.body.addView(button("替换正文（保留阅读记录）",first(handle,()->chooseReplacement(b))));
         contentInfo.body.addView(button((b.epub()?"导出原始 EPUB":"导出原始 TXT"),first(handle,()->chooseTextExport(b))));
@@ -1533,6 +1548,37 @@ public final class MainActivity extends Activity {
         remove.setTextColor(isNight()?0xFFFFB9AB:0xFF9A493E);remove.setContentDescription("移出书架，移入回收站，7 天内可恢复");
         LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(-1,-2);rp.topMargin=dp(10);panel.addView(remove,rp);
         handle[0]=builder.setView(panel).setContentFraction(.62f).setNegativeButton("取消",null).show();
+    }
+    private void cleanupSheet(LibraryStore.Book book){cleanupSheet(book,book.cleanupEnabled,book.cleanupRules);}
+    private void cleanupSheet(LibraryStore.Book book,boolean initialEnabled,String initialRules){
+        if(busy)return;if(book.epub()){toast("正文净化目前支持 TXT");return;}savePosition();
+        LinearLayout panel=column();ToggleRow enabled=new ToggleRow(uiContext(),"对此书启用正文净化",initialEnabled,uiDark());panel.addView(enabled);
+        panel.addView(text("内置规则只移除整行网址和少量明确的翻页广告。可在下方添加字面替换，不执行正则表达式。每本最多20条，先预览再应用。原始文件永久保留。",12,muted));
+        EditText rules=new EditText(uiContext());rules.setTag("cleanup-rules");rules.setHint("每行一条，例如：\n错别字 => 正确文字\n删除整行:本站广告标记");rules.setText(initialRules);rules.setMinLines(4);rules.setMaxLines(7);rules.setFilters(new InputFilter[]{new InputFilter.LengthFilter(TextCleanup.MAX_CONFIG)});panel.addView(rules);
+        panel.addView(text("关闭净化并应用即可恢复原文。清除或替换文字后，进度按上下文迁移；无法定位的书签与划线会保留为待定位记录。导出原始 TXT 始终保留原文，导出 EPUB 使用当前正文。",12,muted));
+        final AppSheet[] owner={null};owner[0]=dialog().setTitle("正文净化 · 仅本书").setView(panel).setContentFraction(.62f).setPositiveButton("预览",null).show();
+        owner[0].getButton(AppSheet.BUTTON_POSITIVE).setOnClickListener(v->{if(busy)return;String config=rules.getText().toString();boolean on=enabled.checked();try{TextCleanup.parse(config);}catch(Exception e){error("规则需要调整",e);return;}owner[0].dismissThen(()->previewCleanup(book,on,config));});
+    }
+    private void previewCleanup(LibraryStore.Book book,boolean enabled,String config){
+        if(busy)return;savePosition();busy=true;showLoading("正在预览正文净化…");io.execute(()->{try{
+            TextDocument raw=TextDocument.decode(TextDocument.readLimited(new FileInputStream(store.file(book))),book.encoding);
+            TextCleanup.Result result=enabled?TextCleanup.apply(raw.text,config):new TextCleanup.Result(raw.text,0,0,Collections.emptyList());
+            TextDocument next=new TextDocument(result.text,raw.encoding,book.chapterRule);TextDocument before=repository.load(book);
+            PositionMigration plan=new PositionMigration(before,next,book.offset,book.anchor,book.marks,book.markNotes,book.markAnchors,book.unmappedMarks,true);
+            int unlocated=0;for(BookNote n:BookNote.remap(book.annotations,next))if(!n.located())unlocated++;final int missing=unlocated;
+            runOnUiThread(()->{hideLoading();busy=false;if(isDestroyed())return;LinearLayout preview=column();preview.addView(text(enabled?"变更 "+result.changed+" 行 · 移除 "+result.removed+" 行":"将恢复原始正文，保留规则以便下次启用。",14,ink));
+                for(String sample:result.samples){TextView row=text(sample,13,muted);row.setPadding(0,dp(8),0,dp(8));preview.addView(row);}
+                if(enabled&&result.samples.isEmpty())preview.addView(text("当前规则未命中正文。",13,muted));
+                preview.addView(text("可定位书签 "+plan.marks.size()+" 个 · 待定位书签 "+plan.unresolved.size()+" 个 · 待定位划线/笔记 "+missing+" 个"+(plan.approximate?"\n阅读进度将按全书比例近似定位。":"\n阅读进度已匹配上下文或章节位置。"),12,muted));
+                dialog().setTitle("净化预览 · "+book.title).setView(preview).setContentFraction(.62f).setPositiveButton(enabled?"应用净化":"恢复原文",(d,w)->applyCleanup(book,enabled,config,next)).setNegativeButton("调整规则",(d,w)->cleanupSheet(book,enabled,config)).show();
+            });
+        }catch(Exception e){runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())error("无法预览，原文与记录未改动",e);});}});
+    }
+    private void applyCleanup(LibraryStore.Book book,boolean enabled,String config,TextDocument next){
+        if(busy)return;savePosition();if(listenUi!=null)listenUi.stopIfBook(book.id);busy=true;showLoading("正在保存净化设置与阅读记录…");
+        io.execute(()->{try{TextDocument old=repository.load(book);PositionMigration plan=new PositionMigration(old,next,book.offset,book.anchor,book.marks,book.markNotes,book.markAnchors,book.unmappedMarks,true);String converted=ChineseText.convert(getApplicationContext(),next.text,book.scriptMode);
+            store.cleanup(book,enabled,config,next,plan);repository.adopt(book,next);runOnUiThread(()->{hideLoading();busy=false;if(isDestroyed())return;if(active==book){capturePage();document=next;readerText=converted;navigation.clear();highlight=-1;searchTerm="";searchSession=null;showReader(plan.offset);revealPage();}else if(active==null)showLibrary(shelfQuery);toast(enabled?"已应用净化，原始文件保留":"已恢复原文");});
+        }catch(Exception e){runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())error("没有保存成功，原记录保留",e);});}});
     }
     private void editBookInfo(LibraryStore.Book book){
         if(busy)return;LinearLayout panel=column();panel.addView(sectionLabel("阅读状态"));
