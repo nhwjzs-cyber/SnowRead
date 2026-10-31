@@ -1,4 +1,4 @@
-﻿param([string]$JdkHome = $env:JAVA_HOME, [string]$TestOutput)
+param([string]$JdkHome = $env:JAVA_HOME, [string]$TestOutput)
 $ErrorActionPreference = 'Stop'
 if (!$JdkHome -or !(Test-Path -LiteralPath (Join-Path $JdkHome 'bin\javac.exe'))) { throw 'Set JAVA_HOME or pass -JdkHome with a full JDK 17+ installation.' }
 $projectRoot = $PSScriptRoot
@@ -31,6 +31,7 @@ $testSources = @(
     (Join-Path $sourceRoot 'ShelfOrganization.java'),
     (Join-Path $sourceRoot 'SearchResults.java'),
     (Join-Path $sourceRoot 'ChapterOrder.java'),
+    (Join-Path $sourceRoot 'ChapterRule.java'),
     (Join-Path $sourceRoot 'TextChunker.java'),
     (Join-Path $sourceRoot 'SpeechQueue.java'),
     (Join-Path $sourceRoot 'SleepTimer.java'),
@@ -43,11 +44,12 @@ $testSources = @(
     (Join-Path $projectRoot 'tests\ShelfOrganizationTest.java'),
     (Join-Path $projectRoot 'tests\SearchResultsTest.java'),
     (Join-Path $projectRoot 'tests\ChapterOrderTest.java'),
+    (Join-Path $projectRoot 'tests\ChapterRuleTest.java'),
     (Join-Path $projectRoot 'tests\ListenCoreTest.java')
 )
 & (Join-Path $JdkHome 'bin\javac.exe') -encoding UTF-8 -d $TestOutput $testSources
 if ($LASTEXITCODE -ne 0) { throw 'Test compilation failed.' }
-foreach ($testClass in @('com.snowread.app.ReaderStatusTextTest','com.snowread.app.PrivacyPolicyTest','com.snowread.app.BookNoteTest','com.snowread.app.LanTransferServerTest','com.snowread.app.TextDocumentTest','com.snowread.app.ReaderBehaviorTest','com.snowread.app.ShelfOrganizationTest','com.snowread.app.SearchResultsTest','com.snowread.app.ChapterOrderTest','com.snowread.app.ListenCoreTest','com.snowread.app.ReaderPolicyTest','com.snowread.app.DirectoryRowsTest','com.snowread.app.ReadingTimeCounterTest')) {
+foreach ($testClass in @('com.snowread.app.ReaderStatusTextTest','com.snowread.app.PrivacyPolicyTest','com.snowread.app.BookNoteTest','com.snowread.app.LanTransferServerTest','com.snowread.app.ChapterRuleTest','com.snowread.app.TextDocumentTest','com.snowread.app.ReaderBehaviorTest','com.snowread.app.ShelfOrganizationTest','com.snowread.app.SearchResultsTest','com.snowread.app.ChapterOrderTest','com.snowread.app.ListenCoreTest','com.snowread.app.ReaderPolicyTest','com.snowread.app.DirectoryRowsTest','com.snowread.app.ReadingTimeCounterTest')) {
     & (Join-Path $JdkHome 'bin\java.exe') --class-path $TestOutput $testClass
     if ($LASTEXITCODE -ne 0) { throw "Tests failed: $testClass" }
 }

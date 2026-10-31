@@ -4,19 +4,10 @@ import java.io.*;
 import java.nio.*;
 import java.nio.charset.*;
 import java.util.*;
-import java.util.regex.*;
 
 /** Pure Java text engine; positions are UTF-16 character offsets in normalized text. */
 public final class TextDocument {
     public static final int MAX_BYTES = 12 * 1024 * 1024;
-    private static final String NUMERALS = "零〇一二三四五六七八九十百千万亿两兩壹贰貳叁參肆伍陆陸柒捌玖拾佰仟0-9０-９";
-    private static final String SPACE = "[\\t \\u3000]*";
-    private static final Pattern NUMBERED = Pattern.compile("^第"+SPACE+"(["+NUMERALS+"\\t \\u3000]+)"+SPACE+"([章节節卷回部篇集])");
-    private static final Pattern ENGLISH = Pattern.compile("(?i)^chapter[\\t ]+([0-9ivxlcdm]+)(?=[\\t :：.、]|$)");
-    private static final Pattern HEADING = Pattern.compile(
-        "^"+SPACE+"(?:第"+SPACE+"["+NUMERALS+"\\t \\u3000]+[章节節卷回部篇集].{0,64}|" +
-        "(?:序章|序言|楔子|引子|前言|后记|尾声|终章|番外).{0,36}|" +
-        "(?i:chapter[\\t ]+[0-9ivxlcdm]+(?:[\\t :：.、].{0,64})?))"+SPACE+"$", Pattern.MULTILINE);
     public final String text;
     public final String encoding;
     public String encodingConfidence="手动指定";
@@ -36,25 +27,23 @@ public final class TextDocument {
         }
     }
     public TextDocument(String text, String encoding) {
+        this(text, encoding, ChapterRule.AUTO);
+    }
+    /** rule selects the recognition strategy (ChapterRule); the text itself is never modified. */
+    public TextDocument(String text, String encoding, int rule) {
         this.text = text.replace("\r\n", "\n").replace('\r', '\n');
         this.encoding = encoding;
-        Matcher m = HEADING.matcher(this.text);
         int currentVolume=-1;
-        while (m.find()) {
-            if(chapters.size()>=10000){chaptersTruncated=true;break;}
-            String title=m.group().trim().replaceAll("^[\\u3000]+|[\\u3000]+$", "");
-            int kind=Chapter.SPECIAL,number=-1;
-            Matcher chinese=NUMBERED.matcher(title), english=ENGLISH.matcher(title);
-            if(chinese.find()) {
-                number=parseNumber(chinese.group(1));
-                kind="卷部篇集".contains(chinese.group(2))?Chapter.VOLUME:Chapter.CHAPTER;
-            } else if(english.find()) {kind=Chapter.CHAPTER;number=parseNumber(english.group(1));}
-            if(kind==Chapter.VOLUME) currentVolume=volumes.size();
-            Chapter entry=new Chapter(title,m.start(),kind,number,currentVolume,kind==Chapter.CHAPTER?numberedChapters.size()+1:0);
+        ChapterRule.Scan scan=ChapterRule.scan(this.text,rule);
+        for (ChapterRule.Match match : scan.matches) {
+            if(chapters.size()>=ChapterRule.MAX_CHAPTERS){chaptersTruncated=true;break;}
+            if(match.kind==Chapter.VOLUME) currentVolume=volumes.size();
+            Chapter entry=new Chapter(match.title,match.offset,match.kind,match.number,currentVolume,match.kind==Chapter.CHAPTER?numberedChapters.size()+1:0);
             chapters.add(entry);
-            if(kind==Chapter.VOLUME) volumes.add(entry);
-            if(kind==Chapter.CHAPTER) numberedChapters.add(entry);
+            if(match.kind==Chapter.VOLUME) volumes.add(entry);
+            if(match.kind==Chapter.CHAPTER) numberedChapters.add(entry);
         }
+        chaptersTruncated=scan.truncated;
         if(chapters.isEmpty() || chapters.get(0).offset>0)
             chapters.add(0,new Chapter("开始阅读",0,Chapter.SPECIAL,-1,-1,0));
         // Bound every rendered row, including novels containing no line breaks.

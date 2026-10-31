@@ -21,6 +21,7 @@ final class LibraryStore {
         final LinkedHashMap<Integer,ReadingAnchor> markAnchors=new LinkedHashMap<>();
         final ArrayList<ReadingAnchor.Unmapped> unmappedMarks=new ArrayList<>();
         String sourceName="",encodingConfidence="";
+        int chapterRule;
         Book(String id, String title, String encoding, int length) {
             this.id=id; this.title=title; this.encoding=encoding; this.length=length;
             this.opened=this.added=System.currentTimeMillis();
@@ -125,7 +126,13 @@ final class LibraryStore {
     private void clearBatch(){batchDepth=0;batchDirty=false;batchBefore=null;batchAdded.clear();}
     private void requireNoBatch(){if(batchDepth>0)throw new IllegalStateException("请等待批量导入结束后再修改书架");}
     TextDocument load(Book book) throws Exception {
-        return TextDocument.decode(TextDocument.readLimited(new FileInputStream(file(book))),book.encoding);
+        TextDocument doc=TextDocument.decode(TextDocument.readLimited(new FileInputStream(file(book))),book.encoding);
+        if(book.chapterRule!=ChapterRule.AUTO){
+            TextDocument ruled=new TextDocument(doc.text,doc.encoding,book.chapterRule);
+            ruled.encodingConfidence=doc.encodingConfidence;
+            return ruled;
+        }
+        return doc;
     }
     File file(Book book) { return new File(directory,book.id+".txt"); }
     File cover(Book book) {return new File(new File(directory,"covers"),book.id+".jpg");}

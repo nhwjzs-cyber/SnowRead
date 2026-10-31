@@ -913,14 +913,78 @@ public final class MainActivity extends Activity {
                 if(current){TextView mark=text("当前",11,accent);mark.setPadding(dp(8),0,0,0);item.addView(mark);}item.setContentDescription(chapter.title+(current?"，当前章":index<anchor?"，当前进度之前":"，尚未到达"));return item;
             }
         };list.setAdapter(adapter);
+        final AppSheet[] self={null};
         Button sort=button(order.descending?"倒序 ↓":"正序 ↑",()->{});sort.setTextSize(12);sort.setContentDescription("切换目录正序或倒序");
+        Button ruleEntry=button("目录识别",()->chapterRuleSheet(doc,active,self));ruleEntry.setTextSize(12);ruleEntry.setContentDescription("预览并选择分章规则");
+        LinearLayout headerRow=row();headerRow.addView(sort,new LinearLayout.LayoutParams(0,-2,1));headerRow.addView(ruleEntry,new LinearLayout.LayoutParams(0,-2,1));
         Runnable locate=()->{filter.setText("");int row=order.locate(anchor);adapter.notifyDataSetChanged();if(row>=0)list.smoothScrollToPositionFromTop(row,Math.max(0,list.getHeight()/3),Motion.enabled(this)?240:0);};
         sort.setOnClickListener(v->{order.descending=!order.descending;prefs.edit().putBoolean("tocDescending",order.descending).apply();sort.setText(order.descending?"倒序 ↓":"正序 ↑");order.rebuild();adapter.notifyDataSetChanged();});
         Button current=button("当前章",locate);current.setTextColor(isNight()?SnowTheme.NIGHT_BACKGROUND:Color.WHITE);current.setCompoundDrawablesRelative(iconDrawable("ic_locate",isNight()?SnowTheme.NIGHT_BACKGROUND:Color.WHITE,20),null,null,null);current.setCompoundDrawablePadding(dp(5));current.setPadding(dp(12),0,dp(12),0);current.setBackground(SnowTheme.ripple(accent,dp(24),0x30FFFFFF));current.setElevation(dp(4));current.setContentDescription("回到当前章");
         FrameLayout.LayoutParams cp=new FrameLayout.LayoutParams(-2,dp(48),Gravity.BOTTOM|Gravity.RIGHT);cp.setMargins(0,0,dp(4),dp(10));stage.addView(current,cp);
-        AppSheet sheet=dialog().setSnowflakes(true).setTitle("目录 · "+doc.volumes.size()+" 卷 · "+doc.numberedChapters.size()+" 章").setHeaderView(sort).setFixedView(panel).setNeutralButton("输入章号",(d,w)->chapterJump()).show();
+        AppSheet sheet=dialog().setSnowflakes(true).setTitle("目录 · "+doc.volumes.size()+" 卷 · "+doc.numberedChapters.size()+" 章").setHeaderView(headerRow).setFixedView(panel).setNeutralButton("输入章号",(d,w)->chapterJump()).show();
+        self[0]=sheet;
         filter.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int f){}public void afterTextChanged(Editable e){}public void onTextChanged(CharSequence s,int a,int b,int c){order.query=s.toString();order.rebuild();adapter.notifyDataSetChanged();list.setSelection(0);}});
         list.setOnItemClickListener((parent,v,p,id)->{int index=order.chapter(p);if(doc.chapters.get(index).kind==TextDocument.Chapter.VOLUME){order.toggle(index);adapter.notifyDataSetChanged();}else{sheet.dismissThen(()->navigateTo(doc.chapters.get(index).offset));}});list.post(locate);
+    }
+    /** F01: preview chapter recognition with a selectable rule, then apply it without touching the text. */
+    private void chapterRuleSheet(TextDocument doc,LibraryStore.Book book,AppSheet[] toc){
+        if(busy||doc!=document)return;
+        AppSheet.Builder builder=dialog().setSnowflakes(true).setTitle("目录识别设置");
+        AppSheet[] handle=new AppSheet[1];
+        LinearLayout panel=column();
+        TextView intro=text("分章不正确时，可换一种识别规则。正文、书签和笔记的位置都不会改变。",12,muted);intro.setPadding(0,0,0,dp(10));panel.addView(intro);
+        ChoiceStrip rules=new ChoiceStrip(uiContext(),new String[]{ChapterRule.label(0),ChapterRule.label(1),ChapterRule.label(2),ChapterRule.label(3)},book.chapterRule,isNight());rules.setTag("chapter-rule");panel.addView(rules);
+        TextView describe=text(ChapterRule.describe(book.chapterRule),12,muted);describe.setPadding(0,dp(8),0,dp(4));panel.addView(describe);
+        TextView status=text("",13,ink);status.setPadding(0,dp(4),0,dp(4));panel.addView(status);
+        LinearLayout previewArea=column();panel.addView(previewArea);
+        Button previewButton=button("重新预览",()->{});panel.addView(previewButton);
+        Button apply=button("应用此规则",()->{});apply.setEnabled(false);panel.addView(apply);
+        TextView note=text("预览只是临时结果，未应用前目录保持原样。",11,muted);note.setPadding(0,dp(8),0,0);panel.addView(note);
+        final int[] generation={0};final int[] chosen={book.chapterRule};final TextDocument[] sample={null};
+        final Runnable[] runPreview={()->{}};
+        runPreview[0]=()->{
+            int token=++generation[0];int rule=chosen[0];
+            sample[0]=null;apply.setEnabled(false);previewArea.removeAllViews();status.setText("正在识别…");
+            io.execute(()->{
+                try{
+                    TextDocument sampleDoc=new TextDocument(doc.text,doc.encoding,rule);
+                    runOnUiThread(()->{
+                        if(generation[0]!=token||isDestroyed()||handle[0]==null||!handle[0].isShowing())return;
+                        sample[0]=sampleDoc;
+                        boolean fallback=sampleDoc.chapters.size()==1&&"开始阅读".equals(sampleDoc.chapters.get(0).title);
+                        int real=fallback?0:sampleDoc.chapters.size();
+                        status.setText(real<=0?"未匹配到标题，可换其他规则或返回原目录":"识别到 "+real+" 章 · "+sampleDoc.volumes.size()+" 卷"+(sampleDoc.chaptersTruncated?"（已截断至 1 万项）":""));
+                        int shown=Math.min(8,sampleDoc.chapters.size());
+                        for(int i=0;i<shown;i++){TextDocument.Chapter c=sampleDoc.chapters.get(i);TextView row=text((i+1)+". "+c.title,13,ink);row.setMaxLines(2);row.setEllipsize(TextUtils.TruncateAt.END);row.setPadding(dp(4),dp(6),dp(4),dp(6));previewArea.addView(row);}
+                        apply.setEnabled(real>0||rule==ChapterRule.AUTO);
+                    });
+                }catch(Exception e){runOnUiThread(()->{if(generation[0]==token&&handle[0]!=null&&handle[0].isShowing())status.setText("识别失败："+e.getMessage());});}
+            });
+        };
+        rules.onChanged(()->{chosen[0]=rules.selected();describe.setText(ChapterRule.describe(chosen[0]));runPreview[0].run();});
+        previewButton.setOnClickListener(v->runPreview[0].run());
+        apply.setOnClickListener(v->{
+            TextDocument sampleDoc=sample[0];
+            if(sampleDoc==null){toast("请先预览识别结果");return;}
+            if(busy)return;busy=true;
+            final TextDocument ruled=sampleDoc;final int rule=chosen[0];
+            if(handle[0]!=null)handle[0].dismissThen(()->applyChapterRule(book,ruled,rule,toc));
+            else applyChapterRule(book,ruled,rule,toc);
+        });
+        handle[0]=builder.setView(panel).setContentFraction(.62f).setNegativeButton("取消",null).show();
+        runPreview[0].run();
+    }
+    /** Same text, new chapter list: swap the document in place, re-capture anchors at their offsets, persist. */
+    private void applyChapterRule(LibraryStore.Book book,TextDocument ruled,int rule,AppSheet[] toc){
+        repository.adopt(book,ruled);document=ruled;book.chapterRule=rule;
+        if(book.anchor!=null)book.anchor=repository.anchor(book,position());
+        ArrayList<Integer> anchored=new ArrayList<>(book.markAnchors.keySet());
+        for(Integer at:anchored){ReadingAnchor recaptured=repository.anchor(book,at);if(recaptured!=null)book.markAnchors.put(at,recaptured);}
+        try{synchronized(store){store.save();}}catch(Exception e){error("规则已应用但未保存",e);}
+        capturePage();showReader(position());revealPage();
+        if(toc[0]!=null){if(toc[0].isShowing())toc[0].dismiss();chapters();}
+        toast("目录已按「"+ChapterRule.label(rule)+"」重新识别");
+        busy=false;
     }
     private void chapterJump() {
         if(document.numberedChapters.isEmpty()){toast("没有识别到带章号的标题，可从目录或进度条定位");return;}
@@ -1307,7 +1371,7 @@ public final class MainActivity extends Activity {
             .setItems(encodings,(d,w)->action.choose(encodings[w])).setNegativeButton("取消",null).show();
     }
     private void changeEncoding(LibraryStore.Book book,String encoding){
-        savePosition();if(busy)return;if(listenUi!=null)listenUi.stopIfBook(book.id);busy=true;showLoading("正在映射原阅读位置和书签…");io.execute(()->{try{TextDocument old=repository.load(book);TextDocument decoded=TextDocument.decode(TextDocument.readLimited(new FileInputStream(store.file(book))),encoding);PositionMigration plan=new PositionMigration(old,decoded,book.offset,book.anchor,book.marks,book.markNotes,book.markAnchors,book.unmappedMarks);runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())showMigration(book,decoded,plan,null,null);});}catch(Exception e){runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())error("编码切换失败，原记录保留",e);});}});
+        savePosition();if(busy)return;if(listenUi!=null)listenUi.stopIfBook(book.id);busy=true;showLoading("正在映射原阅读位置和书签…");io.execute(()->{try{TextDocument old=repository.load(book);TextDocument decoded=TextDocument.decode(TextDocument.readLimited(new FileInputStream(store.file(book))),encoding);if(book.chapterRule!=ChapterRule.AUTO){TextDocument ruled=new TextDocument(decoded.text,decoded.encoding,book.chapterRule);ruled.encodingConfidence=decoded.encodingConfidence;decoded=ruled;}final TextDocument mapped=decoded;PositionMigration plan=new PositionMigration(old,mapped,book.offset,book.anchor,book.marks,book.markNotes,book.markAnchors,book.unmappedMarks);runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())showMigration(book,mapped,plan,null,null);});}catch(Exception e){runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())error("编码切换失败，原记录保留",e);});}});
     }
     private void chooseCover(LibraryStore.Book book) {
         pendingCoverId=book.id;
