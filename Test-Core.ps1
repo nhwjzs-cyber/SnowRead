@@ -6,6 +6,10 @@ if (!$TestOutput) { $TestOutput = Join-Path $projectRoot '.test-build' }
 New-Item -ItemType Directory -Force -Path $TestOutput | Out-Null
 $sourceRoot = Join-Path $projectRoot 'app\src\main\java\com\snowread\app'
 $testSources = @(
+    (Join-Path $projectRoot 'tests\ReadingStatusTest.java'),
+    (Join-Path $projectRoot 'tests\EpubExportTest.java'),
+    (Join-Path $sourceRoot 'ReadingStatus.java'),
+    (Join-Path $sourceRoot 'EpubExport.java'),
     (Join-Path $projectRoot 'tests\EpubDocumentTest.java'),
     (Join-Path $projectRoot 'tests\ReadingStatsDataTest.java'),
     (Join-Path $sourceRoot 'EpubDocument.java'),
@@ -67,7 +71,7 @@ if($LASTEXITCODE -ne 0){throw 'Chinese conversion tests failed'}
 & (Join-Path $JdkHome 'bin\java.exe') -cp $TestOutput com.snowread.app.PageCurlGeometryTest
 if($LASTEXITCODE -ne 0){throw 'Curl geometry tests failed'}
 
-foreach($name in @('EpubDocumentTest','ReadingStatsDataTest')){
+foreach($name in @('EpubDocumentTest','ReadingStatsDataTest','ReadingStatusTest','EpubExportTest')){
     & (Join-Path $JdkHome 'bin\java.exe') -cp $TestOutput "com.snowread.app.$name"
     if($LASTEXITCODE -ne 0){throw "New core test failed: $name"}
 }

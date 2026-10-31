@@ -10,6 +10,7 @@ final class BookNote {
     BookNote(String id,int start,int end,String quote,String note,int style,long created,ReadingAnchor begin,ReadingAnchor finish){this.id=id;this.start=start;this.end=end;this.quote=quote;this.note=note;this.style=style;this.created=created;beginAnchor=begin;endAnchor=finish;}
     boolean located(){return start>=0;}
     boolean valid(int length){return id!=null&&id.matches("[a-f0-9-]{36}")&&quote!=null&&!quote.isEmpty()&&quote.length()<=MAX_QUOTE&&note!=null&&note.length()<=MAX_NOTE&&style>=0&&style<=1&&created>=0&&beginAnchor!=null&&endAnchor!=null&&((start==-1&&end==-1)||(start>=0&&end>start&&end<=length&&end-start==quote.length()));}
+    static ArrayList<BookNote> overlapping(Collection<BookNote> notes,int from,int until){ArrayList<BookNote> out=new ArrayList<>();for(BookNote n:notes)if(n.located()&&n.start<until&&n.end>from)out.add(n);return out;}
     static BookNote create(TextDocument doc,int start,int end,String note,int style){
         start=ReadingAnchor.safe(doc.text,start);end=Math.min(doc.text.length(),Math.max(start+1,end));if(end<doc.text.length()&&Character.isLowSurrogate(doc.text.charAt(end)))end++;
         ReadingAnchor.Resolver r=new ReadingAnchor.Resolver(doc);

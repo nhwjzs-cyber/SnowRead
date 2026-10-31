@@ -20,7 +20,7 @@ final class LibraryStore {
         volatile ReadingAnchor anchor;
         final LinkedHashMap<Integer,ReadingAnchor> markAnchors=new LinkedHashMap<>();
         final ArrayList<ReadingAnchor.Unmapped> unmappedMarks=new ArrayList<>();
-        String sourceName="",encodingConfidence="",format="txt";
+        String sourceName="",encodingConfidence="",format="txt",memo="";
         boolean epub(){return "epub".equals(format);}
         int chapterRule,scriptMode;
         Book(String id, String title, String encoding, int length) {
@@ -168,6 +168,10 @@ final class LibraryStore {
     private static void atomicCopy(File from,File to,long limit)throws Exception{File parent=to.getParentFile();if(!parent.isDirectory()&&!parent.mkdirs())throw new IOException("无法恢复文件");AtomicFile target=new AtomicFile(to);FileOutputStream out=target.startWrite();try(InputStream in=new FileInputStream(from)){BackupArchive.copy(in,out,limit);target.finishWrite(out);}catch(Exception e){target.failWrite(out);throw e;}}
     private static Book snapshot(Book b){Book copy=new Book(b.id,b.title,b.encoding,b.length);copy.offset=b.offset;copy.opened=b.opened;copy.pinned=b.pinned;copy.categoryIds.addAll(b.categoryIds);copy.marks.addAll(b.marks);copy.markNotes.putAll(b.markNotes);BookExtras.copy(b,copy);return copy;}
     private static void migration(Book b,TextDocument doc,PositionMigration plan){ArrayList<BookNote> mapped=BookNote.remap(b.annotations,doc);b.annotations.clear();b.annotations.addAll(mapped);b.encoding=doc.encoding;b.encodingConfidence=doc.encodingConfidence;b.length=doc.text.length();b.offset=plan.offset;b.anchor=plan.anchor;b.marks.clear();b.marks.addAll(plan.marks);b.markNotes.clear();b.markNotes.putAll(plan.notes);b.markAnchors.clear();b.markAnchors.putAll(plan.anchors);b.unmappedMarks.clear();b.unmappedMarks.addAll(plan.unresolved);}
+    synchronized void updateBookInfo(Book book,String memo,int state)throws Exception{
+        requireNoBatch();if(find(book.id)!=book)throw new IOException("这本书已不在书架中");if(memo==null||memo.length()>ReadingStatus.MAX_MEMO||!ReadingStatus.valid(state))throw new IOException("备注最多2000字，请选择有效阅读状态");
+        String before=book.memo;int old=book.readingState;book.memo=memo;book.readingState=state;try{save();}catch(Exception e){book.memo=before;book.readingState=old;throw e;}
+    }
     synchronized void updateNote(Book book,BookNote previous,BookNote replacement)throws Exception{
         requireNoBatch();if(find(book.id)!=book)throw new IOException("书籍已发生变化，请重新打开");
         ArrayList<BookNote> before=new ArrayList<>(book.annotations);

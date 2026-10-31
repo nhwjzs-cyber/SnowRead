@@ -74,8 +74,25 @@ public final class FeatureInstrumentation extends Instrumentation {
         testReaderFurniture(context,store.find(a.id));
         testScriptAndCurl(context,store.find(a.id));
         testEpubAndStats(context,store);
+        testBookInfoDeletionExport(context,store);
     }
     private int currentReadingOffset()throws Exception{Method method=MainActivity.class.getDeclaredMethod("position");method.setAccessible(true);return (Integer)method.invoke(activity);}
+    private void testBookInfoDeletionExport(Context context,LibraryStore store)throws Exception{
+        byte[] bytes="第一章 新雪\n这是一段用于检查划线删除的正文。\n第二章 春来\n书籍备注不会写入正文。".getBytes(StandardCharsets.UTF_8);
+        LibraryStore.Book book=store.add(bytes,"Native memo status.txt",null);TextDocument doc=store.load(book);book.offset=6;BookNote note=BookNote.create(doc,0,4,"仅本机笔记",1);store.updateNote(book,null,note);
+        ui(()->{invoke("editBookInfo",new Class<?>[]{LibraryStore.Book.class},book);EditText memo=sheet().getWindow().getDecorView().findViewWithTag("book-memo");memo.setText("原生界面备注测试");ChoiceStrip state=sheet().getWindow().getDecorView().findViewWithTag("book-reading-state");state.getChildAt(3).performClick();sheet().getButton(AppSheet.BUTTON_POSITIVE).performClick();});
+        await(()->!(Boolean)field(activity,"busy")&&book.memo.equals("原生界面备注测试")&&sheet()==null);
+        ui(()->{check(book.readingState==ReadingStatus.FINISHED&&book.offset==6,"manual finished preserves original position");context.getSharedPreferences("reader",0).edit().putInt("shelfShow",3).apply();invoke("showLibrary",new Class<?>[]{String.class},"");check(((List<?>)field(field(activity,"shelfAdapter"),"visible")).contains(book),"finished filter displays explicit finished book");set(activity,"pagedMode",false);});
+        open(book);
+        ui(()->{check(book.readingState==ReadingStatus.FINISHED,"rereading keeps manual finished status");invoke("copySentence",new Class<?>[]{int.class},1);check(sheet().getWindow().getDecorView().findViewWithTag("note-delete")!=null,"long pressing saved mark opens management instead of duplicate creation");sheet().getWindow().getDecorView().findViewWithTag("note-delete").performClick();});
+        await(()->sheet()!=null&&text(sheet(),"删除这条标记？")!=null);
+        ui(()->sheet().getButton(AppSheet.BUTTON_POSITIVE).performClick());await(()->!(Boolean)field(activity,"busy")&&book.annotations.isEmpty()&&field(activity,"reader")!=null&&((ListView)field(activity,"reader")).getChildCount()>0);
+        ui(()->{TextView row=(TextView)((ListView)field(activity,"reader")).getChildAt(0);check(((android.text.Spanned)row.getText()).getSpans(0,row.length(),android.text.style.UnderlineSpan.class).length==0,"deleted underline removed from rendered scroll text");});
+        check(new LibraryStore(context).find(book.id).annotations.isEmpty(),"deleted annotation stays absent after reload");
+        ByteArrayOutputStream exported=new ByteArrayOutputStream();EpubExport.write(exported,doc,book.title,(d,t)->{});EpubDocument decoded=EpubDocument.parse(exported.toByteArray());check(decoded.document.text.contains("检查划线删除"),"generated EPUB reopens through Android XML parser");
+        check(Arrays.equals(bytes,TextDocument.readLimited(new FileInputStream(store.file(book)))),"original TXT is untouched by notes/status/export");
+        ui(()->{context.getSharedPreferences("reader",0).edit().putInt("shelfShow",0).apply();});
+    }
     private void testEpubAndStats(Context context,LibraryStore store)throws Exception{
         ByteArrayOutputStream bytes=new ByteArrayOutputStream();
         String[] paths={"mimetype","META-INF/container.xml","book.opf","chapter.xhtml"};

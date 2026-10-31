@@ -7,8 +7,8 @@ android {
         applicationId 'com.snowread.app'
         minSdk 23
         targetSdk 35
-        versionCode 46
-        versionName '0.16.5'
+        versionCode 47
+        versionName '0.16.6'
 
     }
     compileOptions {

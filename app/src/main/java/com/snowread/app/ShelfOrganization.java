@@ -9,12 +9,13 @@ final class ShelfOrganization {
         String id,title;
         final LinkedHashSet<String> categoryIds=new LinkedHashSet<>();
         long opened,added;
-        boolean pinned;
+        boolean pinned,readingStarted;
+        int readingState;
     }
     /** Reading progress source for sorting and filtering; implemented against the concrete book. */
     interface Progress {float ratio(Entry book);}
     static final int SORT_SMART=0,SORT_RECENT=1,SORT_ADDED=2,SORT_TITLE=3;
-    static final int SHOW_ALL=0,SHOW_READING=1,SHOW_UNREAD=2;
+    static final int SHOW_ALL=0,SHOW_READING=1,SHOW_UNREAD=2,SHOW_FINISHED=3;
     /** Re-orders a filtered shelf; SORT_SMART keeps visible()'s pinned-first, most-recent order. */
     static <T extends Entry> ArrayList<T> arrange(ArrayList<T> list,int sort){
         if(sort==SORT_RECENT)Collections.sort(list,(a,b)->{int order=Long.compare(b.opened,a.opened);return order!=0?order:a.id.compareTo(b.id);});
@@ -25,7 +26,7 @@ final class ShelfOrganization {
     static <T extends Entry> ArrayList<T> filterProgress(ArrayList<T> list,int show,Progress progress){
         if(show==SHOW_ALL)return list;
         ArrayList<T> out=new ArrayList<>();
-        for(T book:list){float r=progress.ratio(book);boolean started=r>0f,finished=r>=1f;if(show==SHOW_READING?started&&!finished:!started)out.add(book);}
+        for(T book:list){int state=ReadingStatus.of(book,progress.ratio(book));if(show==SHOW_READING?state==ReadingStatus.READING:show==SHOW_UNREAD?state==ReadingStatus.UNREAD:state==ReadingStatus.FINISHED)out.add(book);}
         return out;
     }
     final LinkedHashMap<String,String> categories=new LinkedHashMap<>();
