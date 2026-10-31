@@ -6,6 +6,10 @@ if (!$TestOutput) { $TestOutput = Join-Path $projectRoot '.test-build' }
 New-Item -ItemType Directory -Force -Path $TestOutput | Out-Null
 $sourceRoot = Join-Path $projectRoot 'app\src\main\java\com\snowread\app'
 $testSources = @(
+    (Join-Path $sourceRoot 'ChineseConverter.java'),
+    (Join-Path $sourceRoot 'PageCurlGeometry.java'),
+    (Join-Path $projectRoot 'tests\ChineseConverterTest.java'),
+    (Join-Path $projectRoot 'tests\PageCurlGeometryTest.java'),
     (Join-Path $sourceRoot 'BookNote.java'),
     (Join-Path $sourceRoot 'ReaderStatusText.java'),
     (Join-Path $projectRoot 'tests\ReaderStatusTextTest.java'),
@@ -53,3 +57,8 @@ foreach ($testClass in @('com.snowread.app.ReaderStatusTextTest','com.snowread.a
     & (Join-Path $JdkHome 'bin\java.exe') --class-path $TestOutput $testClass
     if ($LASTEXITCODE -ne 0) { throw "Tests failed: $testClass" }
 }
+
+& (Join-Path $JdkHome 'bin\java.exe') -cp $TestOutput com.snowread.app.ChineseConverterTest (Join-Path $projectRoot 'app\src\main\assets\conversion')
+if($LASTEXITCODE -ne 0){throw 'Chinese conversion tests failed'}
+& (Join-Path $JdkHome 'bin\java.exe') -cp $TestOutput com.snowread.app.PageCurlGeometryTest
+if($LASTEXITCODE -ne 0){throw 'Curl geometry tests failed'}

@@ -72,8 +72,58 @@ public final class FeatureInstrumentation extends Instrumentation {
         testPrivacyMigration(context);
         testAtmosphere(context,store.find(a.id));
         testReaderFurniture(context,store.find(a.id));
+        testScriptAndCurl(context,store.find(a.id));
     }
     private int currentReadingOffset()throws Exception{Method method=MainActivity.class.getDeclaredMethod("position");method.setAccessible(true);return (Integer)method.invoke(activity);}
+    private void testScriptAndCurl(Context context,LibraryStore.Book book)throws Exception{
+        book.scriptMode=2;open(book);
+        ui(()->{
+            TextDocument source=(TextDocument)field(activity,"document");String display=(String)field(activity,"readerText");
+            check(source.text.length()==display.length(),"converted text retains UTF-16 offsets");
+            check(display.contains("故事正在繼續"),"opening a book prepares traditional display before drawing");
+            check(source.text.contains("故事正在继续"),"original document unchanged");
+            invoke("appearance",new Class<?>[0]);
+            View script=sheet().getWindow().getDecorView().findViewWithTag("reading-script-mode");
+            check(script instanceof ChoiceStrip,"script mode in existing font group");
+            ((ChoiceStrip)script).getChildAt(1).performClick();
+        });
+        await(()->book.scriptMode==1);
+        ui(()->{check(((String)field(activity,"readerText")).contains("故事正在继续"),"script selection updates reader while panel open");sheet().dismiss();});
+        await(()->field(activity,"previewTypeset")==null);
+        ui(()->{
+            context.getSharedPreferences("reader",0).edit().putInt("pageEffect",1).putBoolean("pageSnowDust",true).putBoolean("reduceMotion",false).putBoolean("rightSwipeNext",false).apply();
+            set(activity,"pagedMode",true);set(activity,"pageMotion",true);invoke("showReader",new Class<?>[]{int.class},0);
+        });
+        await(()->field(activity,"pagedReader")!=null&&!((PagedReaderView)field(activity,"pagedReader")).isIndexing());
+        ui(()->{
+            PagedReaderView page=(PagedReaderView)field(activity,"pagedReader");check((Boolean)field(page,"curlMode"),"curl effect selected");
+            int before=page.position();swipe(page,true,false);check(page.position()==before,"cancel curl never commits offset");
+            page.finishMotion();page.next();
+        });
+        await(()->!((PagedReaderView)field(activity,"pagedReader")).isIndexing()&&field(field(activity,"pagedReader"),"animator")!=null);
+        ui(()->{
+            PagedReaderView page=(PagedReaderView)field(activity,"pagedReader");
+            check(field(page,"dustAnimator")==null,"snow does not start before completed turn");
+            ((android.animation.ValueAnimator)field(page,"animator")).end();
+            check(field(page,"dustAnimator")!=null,"snow starts after successful completion");
+            page.finishMotion();check(field(page,"dustAnimator")==null,"forced completion clears snow");
+            context.getSharedPreferences("reader",0).edit().putBoolean("reduceMotion",true).apply();page.setAnimationEnabled(false);
+            page.next();check(field(page,"animator")==null&&field(page,"dustAnimator")==null,"reduced motion suppresses animation and snow");
+        });
+        ui(()->{
+            int w=320,h=640;android.text.TextPaint ink=new android.text.TextPaint(Paint.ANTI_ALIAS_FLAG);ink.setColor(Color.WHITE);ink.setTextSize(20);
+            ReaderTypography typography=new ReaderTypography(context);android.text.StaticLayout old=typography.layout("Old page",ink,w,1),next=typography.layout("New page",ink,w,1);
+            PageCurlRenderer renderer=new PageCurlRenderer();
+            for(int direction:new int[]{-1,1})for(float progress:new float[]{0,.25f,.5f,.75f,1}){
+                Bitmap bitmap=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(bitmap);renderer.draw(canvas,old,next,w,h,progress,direction,0xFF172029);
+                check(Color.red(bitmap.getPixel(w-1,h-1))<80,"curl paper stays dark across directions and frames");bitmap.recycle();
+            }
+            Bitmap bitmap=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);bitmap.eraseColor(Color.BLACK);new PageTurnDust().draw(new Canvas(bitmap),.2f,1,w,h,24,24,1,true);
+            boolean changed=false;for(int y=0;y<h;y++)for(int x=0;x<w;x++){int color=bitmap.getPixel(x,y);if(x>=24&&x<w-24)check(color==Color.BLACK,"snow never paints body");else if(color!=Color.BLACK)changed=true;}
+            check(changed,"snow visible in margin");bitmap.recycle();
+            context.getSharedPreferences("reader",0).edit().putBoolean("reduceMotion",false).apply();
+        });
+    }
     private void testReaderFurniture(Context context,LibraryStore.Book book)throws Exception{
         android.content.SharedPreferences prefs=context.getSharedPreferences("reader",0);
         ui(()->{if(sheet()!=null)sheet().dismissNow();if(field(activity,"active")!=null)invoke("leaveReader",new Class<?>[0]);prefs.edit().remove("readerFooter").remove("readerHeader").putBoolean("reduceMotion",true).putInt("appearance",2).putInt("autoNight",0).putString("readerSettingsGroup","display").apply();Motion.invalidateCache(context);book.typeset=new Typeset();book.offset=600;book.anchor=null;((LibraryStore)field(activity,"store")).save();set(activity,"pagedMode",false);});open(book);

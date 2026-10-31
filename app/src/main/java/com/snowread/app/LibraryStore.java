@@ -21,7 +21,7 @@ final class LibraryStore {
         final LinkedHashMap<Integer,ReadingAnchor> markAnchors=new LinkedHashMap<>();
         final ArrayList<ReadingAnchor.Unmapped> unmappedMarks=new ArrayList<>();
         String sourceName="",encodingConfidence="";
-        int chapterRule;
+        int chapterRule,scriptMode;
         Book(String id, String title, String encoding, int length) {
             this.id=id; this.title=title; this.encoding=encoding; this.length=length;
             this.opened=this.added=System.currentTimeMillis();

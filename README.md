@@ -8,7 +8,7 @@
 
 融雪阅读是一款以本地 TXT 小说阅读为主的原生 Android 阅读器，由个人开发维护。纸色阅读背景搭配冷色界面，支持分页与滚动两种阅读模式，设计上尽量克制：不设广告，不接入第三方统计与崩溃上报，书籍与阅读记录只保存在设备本地。
 
-当前版本：**v0.16.3（测试版）** · Android 6.0 / API 23 及以上 · 应用标识 `com.snowread.app`
+当前源码：**v0.16.4（本地测试版，尚未发布）** · Android 6.0 / API 23 及以上 · 应用标识 `com.snowread.app`
 
 **[前往 Releases 下载](https://github.com/nhwjzs-cyber/SnowRead/releases)**
 
@@ -32,13 +32,14 @@
 - 章节与分卷识别、目录跳转、阅读进度、书签和正文搜索；支持目录识别预览与按书选择识别规则。
 - 常驻页脚（默认开启）：进度、时间、电量；可选章节页眉（默认关闭），主题跟随阅读纸色。
 - 按日统计阅读时长，数据仅保存在本机。
-- 分页与滚动阅读、翻页动效、夜读模式、按书独立排版与自定义字体。
+- 分页与滚动阅读、仿真卷页与完成时边框雪尘、夜读模式、按书独立排版与自定义字体。
+- 按书离线简繁显示，保留原始 TXT、书签和笔记位置。
 - 选段高亮、下划线与备注，笔记统一管理并支持 Markdown 导出。
 - 系统离线语音听书，支持睡眠定时与后台播放。
 - 整库备份与恢复、回收站，以及需手动开启的 Wi-Fi 局域网传书。
 - 可手动选择的天气氛围与本地时间光线效果，配合克制的融雪与新芽动效。
 
-EPUB 暂未支持。
+EPUB 暂未支持。v0.16.4 新功能入口与验证边界见 [UPDATE-v0.16.4.md](UPDATE-v0.16.4.md)。
 
 ## 安装与数据
 
@@ -92,6 +93,8 @@ sh ./gradlew assembleDebug
 本项目自有代码采用 [PolyForm Noncommercial License 1.0.0](LICENSE)，允许在许可范围内学习、研究、非商业修改和分享。除正式许可明确允许的情形或另行授权外，不授予将源码或改版用于商业与盈利目的的许可，包括打包出售、付费会员、订阅、付费解锁和广告变现。
 
 因此，本项目属于**源码可用、非商业许可**，不按照允许商用的标准开源项目宣传。公益、教育等组织的标准许可例外和完整规则见 [中文使用说明](NONCOMMERCIAL.zh-CN.md) 与 [LICENSE](LICENSE)。分发时请保留 [NOTICE](NOTICE) 和许可声明。
+
+简繁字词典来自 OpenCC ver.1.1.9，按 Apache-2.0 分发；见 [词典来源](app/src/main/assets/conversion/ABOUT.json)、[授权](app/src/main/assets/conversion/LICENSE) 与 [说明](app/src/main/assets/conversion/NOTICE.txt)。
 
 内置宋体子集来自 Adobe 思源宋体，继续按 SIL OFL 1.1 分发；Gradle Wrapper 保留其自带的 Apache 2.0 许可。
 

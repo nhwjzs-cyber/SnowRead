@@ -17,6 +17,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class PagedReaderView extends View {
     public interface Listener {void changed();void notice(String message);void toggleControls();void userTurn();void copyAt(int offset);void bookmarkAt(int offset);}
     private final TextDocument doc;
+    private final String displayText;
+    private final boolean curlMode,snowDust;
+    private final PageCurlRenderer curl=new PageCurlRenderer();
+    private final PageTurnDust dust=new PageTurnDust();
+    private ValueAnimator dustAnimator;private float dustFraction=1;private int dustDirection;
     private final TextPaint paint=new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final Paint edgeShadow=new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint edgeLight=new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -70,7 +75,11 @@ public final class PagedReaderView extends View {
     private final GestureDetector gestures;
 
     public PagedReaderView(Context context,TextDocument doc,int fontSize,float lineSpacing,int color,int background,int highlightColor,int margin,Typeset typeset){
-        super(context);this.doc=doc;this.lineSpacing=lineSpacing;this.highlightColor=highlightColor;pageBackground=background;
+        this(context,doc,fontSize,lineSpacing,color,background,highlightColor,margin,typeset,doc.text);
+    }
+    public PagedReaderView(Context context,TextDocument doc,int fontSize,float lineSpacing,int color,int background,int highlightColor,int margin,Typeset typeset,String displayText){
+        super(context);this.doc=doc;this.displayText=displayText.length()==doc.text.length()?displayText:doc.text;this.lineSpacing=lineSpacing;this.highlightColor=highlightColor;pageBackground=background;
+        curlMode=context.getSharedPreferences("reader",0).getInt("pageEffect",1)==1;snowDust=context.getSharedPreferences("reader",0).getBoolean("pageSnowDust",true);
         typography=new ReaderTypography(context,typeset);leftHand=context.getSharedPreferences("reader",0).getBoolean("leftHand",false);doubleBookmark=context.getSharedPreferences("reader",0).getBoolean("doubleBookmark",false);verticalPages=context.getSharedPreferences("reader",0).getBoolean("verticalPages",false);rightSwipeNext=context.getSharedPreferences("reader",0).getBoolean("rightSwipeNext",false);
         paint.setTextSize(fontSize*getResources().getDisplayMetrics().scaledDensity);paint.setColor(color);paint.setTypeface(typography.face);
         edgeShadow.setColor(Color.argb(26,30,70,80));
@@ -151,7 +160,7 @@ public final class PagedReaderView extends View {
         worker.execute(()->{
             try{
                 PageIndex index=PageIndex.extend(known,start,sectionEnd,target,
-                    (at,limit)->fitPage(doc.text,at,limit,measurePaint,width,height,lineSpacing),
+                    (at,limit)->fitPage(displayText,at,limit,measurePaint,width,height,lineSpacing),
                     ()->disposed||ticket.get()!=token||Thread.currentThread().isInterrupted());
                 if(index==null)return;
                 post(()->{
@@ -213,7 +222,7 @@ public final class PagedReaderView extends View {
         animation.addUpdateListener(value->{if(animator==animation){slideFraction=(Float)value.getAnimatedValue();invalidate();}});
         animation.addListener(new AnimatorListenerAdapter(){
             @Override public void onAnimationEnd(Animator value){
-                if(animator==animation){animator=null;outgoingLayout=null;slideFraction=1;invalidate();}
+                if(animator==animation){animator=null;outgoingLayout=null;slideFraction=1;startDust(slideDirection);invalidate();}
             }
         });
         animation.start();
@@ -231,9 +240,20 @@ public final class PagedReaderView extends View {
         cancelNudge();
     }
     private void finishTransition(){
-        cancelAnimation();cancelEffects();
+        cancelAnimation();cancelEffects();stopDust();
         slideFraction=1;verticalTracking=false;clearDrag();invalidate();
     }
+    public void finishMotion(){finishTransition();}
+    private void stopDust(){ValueAnimator running=dustAnimator;dustAnimator=null;if(running!=null)running.cancel();dustFraction=1;}
+    private void startDust(int direction){
+        stopDust();if(!snowDust||!animationsAllowed()||!isAttachedToWindow()||getWindowVisibility()!=VISIBLE)return;
+        dustDirection=direction;dustFraction=0;ValueAnimator animation=ValueAnimator.ofFloat(0,1);dustAnimator=animation;
+        animation.setDuration(620);animation.setInterpolator(new android.view.animation.LinearInterpolator());
+        animation.addUpdateListener(v->{if(dustAnimator==animation){dustFraction=(Float)v.getAnimatedValue();invalidate();}});
+        animation.addListener(new AnimatorListenerAdapter(){@Override public void onAnimationEnd(Animator value){if(dustAnimator==animation){dustAnimator=null;dustFraction=1;invalidate();}}});animation.start();
+    }
+    @Override protected void onWindowVisibilityChanged(int visibility){super.onWindowVisibilityChanged(visibility);if(visibility!=VISIBLE)finishTransition();}
+    @Override public void onWindowFocusChanged(boolean focused){super.onWindowFocusChanged(focused);if(!focused)finishTransition();}
     private void clearDrag(){dragging=false;dragRaw=0;dragOffset=0;dragNeighbour=null;pendingTurn=0f;neighbourDirection=0;++neighbourRequest;}
     void setNotes(java.util.Collection<BookNote> notes){typography.notes=java.util.Collections.unmodifiableList(new java.util.ArrayList<>(notes));}
     public void setHighlight(int highlight,String term){
@@ -241,7 +261,7 @@ public final class PagedReaderView extends View {
         this.highlight=highlight;this.term=term==null?"":term;finishTransition();if(currentIndex!=null)render();
     }
     private void render(){
-        SpannableString body=typography.style(doc.text,offset,endOffset,paint.getTextSize(),getResources().getDisplayMetrics().density);
+        SpannableString body=typography.style(displayText,offset,endOffset,paint.getTextSize(),getResources().getDisplayMetrics().density);
         if(highlight>=offset-term.length()&&highlight<endOffset&&!term.isEmpty()){
             int a=Math.max(0,highlight-offset),b=Math.min(body.length(),highlight-offset+term.length());
             if(b>a)body.setSpan(new BackgroundColorSpan(highlightColor),a,b,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
@@ -416,11 +436,11 @@ public final class PagedReaderView extends View {
         neighbourWorker.execute(()->{
             try{
                 PageIndex index=PageIndex.extend(known,start,limit,targetOffset,
-                    (at,end)->fitPage(doc.text,at,end,measurePaint,width,height,lineSpacing),
+                    (at,end)->fitPage(displayText,at,end,measurePaint,width,height,lineSpacing),
                     ()->disposed||Thread.currentThread().isInterrupted());
                 if(index==null)return;
                 int at=index.start(index.pageAt(targetOffset)),end=index.end(index.pageAt(targetOffset));
-                final StaticLayout prepared=typography.layout(typography.style(doc.text,at,end,measurePaint.getTextSize(),density),measurePaint,width,lineSpacing);
+                final StaticLayout prepared=typography.layout(typography.style(displayText,at,end,measurePaint.getTextSize(),density),measurePaint,width,lineSpacing);
                 post(()->{if(!disposed&&ticket.get()==token&&request==neighbourRequest&&dragging){cache.put(section,index);dragNeighbour=prepared;invalidate();}});
             }catch(Exception ignored){}
         });
@@ -453,12 +473,17 @@ public final class PagedReaderView extends View {
             float width=contentWidth();
             if(outgoingLayout!=null){
                 // A committed turn: the old page leaves while the new one slides in.
+                if(curlMode&&motionEnabled)curl.draw(canvas,outgoingLayout,layout,width,contentHeight(),slideFraction,slideDirection,pageBackground);
+                else {
                 float oldX=-slideDirection*width*slideFraction,newX=slideDirection*width*(1-slideFraction);
                 drawPage(canvas,outgoingLayout,oldX);drawPage(canvas,layout,newX);
                 float boundary=slideDirection>0?newX:oldX;
                 drawBoundary(canvas,boundary,-slideDirection);
+                }
             }else if((dragging||pendingTurn>0f)&&dragOffset!=0){
                 // The neighbour waits on the far side while the current page follows the finger.
+                if(curlMode&&motionEnabled){curl.draw(canvas,layout,dragNeighbour!=null?dragNeighbour:layout,width,contentHeight(),Math.min(1,Math.abs(dragOffset)/width),dragOffset<0?1:-1,pageBackground);}
+                else {
                 if(dragNeighbour!=null){
                     float neighbourX=dragOffset<0?width+dragOffset:dragOffset-width;
                     drawPage(canvas,dragNeighbour,neighbourX);
@@ -466,9 +491,11 @@ public final class PagedReaderView extends View {
                 drawPage(canvas,layout,dragOffset);
                 float boundary=dragOffset<0?dragOffset+width:dragOffset;
                 drawBoundary(canvas,boundary,dragOffset<0?-1:1);
+                }
             }else drawPage(canvas,layout,nudgeValue);
             canvas.restore();
         }else canvas.drawText(indexing?"正在定位页面…":"请选择阅读位置",getPaddingLeft(),getPaddingTop()-paint.ascent(),paint);
+        if(dustFraction<1)dust.draw(canvas,dustFraction,dustDirection,getWidth(),getHeight(),getPaddingLeft(),getPaddingRight(),density,paint.getColor()!=0&&((pageBackground>>16)&255)<90);
     }
     @Override public boolean onTouchEvent(MotionEvent event){
         if(tracker==null)tracker=VelocityTracker.obtain();

@@ -1,0 +1,6 @@
+OpenCC dictionary data
+Source: https://github.com/BYVoid/OpenCC/tree/ver.1.1.9/data/dictionary
+Project: BYVoid and OpenCC contributors
+License: Apache License 2.0 (included as LICENSE)
+
+The four dictionary files are distributed unmodified. SnowRead uses its own Java display adapter: longest phrase match, first candidate and only equal UTF-16 length / identical surrogate-boundary mappings. This is not the full OpenCC conversion engine.

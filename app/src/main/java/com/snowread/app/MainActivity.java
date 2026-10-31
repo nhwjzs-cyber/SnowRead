@@ -79,6 +79,7 @@ public final class MainActivity extends Activity {
     private ListView reader;
     private PagedReaderView pagedReader;
     private boolean pagedMode=false,pageMotion=true;
+    private String readerText="";
     private TextView chapterLabel, progressLabel,readerHeader;
     private ReaderFooter readerFooter;
     private SeekBar progress;
@@ -155,7 +156,7 @@ public final class MainActivity extends Activity {
         boolean listMode=!selecting&&prefs!=null&&prefs.getBoolean("shelfList",false);
         if(readerFooter!=null)readerFooter.resumed(false);readerFooter=null;readerHeader=null;
         chrome.leave();chromeHandler.removeCallbacks(chromeTimeout);readerTopBar=null;readerBottomBar=null;readerStage=null;shelfQuery=query;
-        if(readingStats!=null)readingStats.pulse(false,lastReadingInteraction);active=null;document=null;searchSession=null;reader=null;pagedReader=null;navigation.clear();previewTypeset=null;previewNightMode=null;brightnessGesture.reset();applyTypeset();palette=effectivePalette();appearanceDark=uiDark();
+        if(readingStats!=null)readingStats.pulse(false,lastReadingInteraction);active=null;document=null;readerText="";searchSession=null;reader=null;pagedReader=null;navigation.clear();previewTypeset=null;previewNightMode=null;brightnessGesture.reset();applyTypeset();palette=effectivePalette();appearanceDark=uiDark();
         if(!ShelfOrganization.ALL.equals(shelfCategory)&&!ShelfOrganization.PINNED.equals(shelfCategory)&&!ShelfOrganization.NONE.equals(shelfCategory)&&!store.organization.categories.containsKey(shelfCategory))shelfCategory=ShelfOrganization.ALL;
         HashSet<String> available=new HashSet<>();for(LibraryStore.Book b:store.books)available.add(b.id);selectedBooks.retainAll(available);
         frame(false);applyReaderWindow();selectionTitle=null;batchPin=null;batchDelete=null;
@@ -711,9 +712,10 @@ public final class MainActivity extends Activity {
             try {
                 FontLibrary.face(getApplicationContext(),book.typeset==null?ReaderTypography.global(this):book.typeset);
                 TextDocument loaded=repository.load(book);
+                String converted=ChineseText.convert(getApplicationContext(),loaded.text,book.scriptMode);
                 runOnUiThread(()-> {
                     hideLoading();busy=false;if (isDestroyed()||token!=generation) return;
-                    navigation.clear();capturePage();active=book; document=loaded; active.length=loaded.text.length(); active.opened=System.currentTimeMillis();prefs.edit().putString("lastBook",book.id).apply();if(loaded.chaptersTruncated)toast("标题超过 1 万个，仅索引前 1 万项；后续正文仍可阅读和搜索");
+                    navigation.clear();capturePage();active=book; document=loaded;readerText=converted; active.length=loaded.text.length(); active.opened=System.currentTimeMillis();prefs.edit().putString("lastBook",book.id).apply();if(loaded.chaptersTruncated)toast("标题超过 1 万个，仅索引前 1 万项；后续正文仍可阅读和搜索");
                     searchTerm="";highlight=-1;listenFollowing=true;showReader(active.offset);revealPage();applyAwake();if(openListenAfterLoad){openListenAfterLoad=false;listenUi.open();}
                 });
             } catch (Exception e) { runOnUiThread(()-> { hideLoading();busy=false;if (!isDestroyed()) {showLibrary("");error("无法打开这本书",e);} }); }
@@ -733,7 +735,7 @@ public final class MainActivity extends Activity {
         }
         chapterLabel=text("",11,muted);chapterLabel.setSingleLine(true);chapterLabel.setEllipsize(TextUtils.TruncateAt.END);
         if(pagedMode) {
-            PagedReaderView view=new PagedReaderView(this,document,fontSize,spacing,ink,bg,palette==2?0xFF71612D:0xFFE7D69D,sideMargin,effectiveTypeset());
+            PagedReaderView view=new PagedReaderView(this,document,fontSize,spacing,ink,bg,palette==2?0xFF71612D:0xFFE7D69D,sideMargin,effectiveTypeset(),readerText);
             view.setNotes(active.annotations);pagedReader=view;view.setAnimationEnabled(pageMotion&&Motion.enabled(this));view.setHighlight(highlight,searchTerm);
             view.setListener(new PagedReaderView.Listener() {
                 public void changed() {
@@ -875,7 +877,7 @@ public final class MainActivity extends Activity {
     }
     private void updateProgress(int offset) {
         if(document==null||chapterLabel==null) return;if(progress instanceof BookmarkSeekBar)((BookmarkSeekBar)progress).bookmarks(active.marks,document.text.length(),isNight());
-        String currentTitle=document.readingTitle(offset);chapterLabel.setText(currentTitle);if(readerHeader!=null)readerHeader.setText(currentTitle);if(active!=null&&(!currentTitle.equals(prefs.getString("lastChapter",""))||!active.id.equals(prefs.getString("lastBook",""))))prefs.edit().putString("lastBook",active.id).putString("lastChapter",currentTitle).apply();
+        String currentTitle=ChineseText.label(document.readingTitle(offset),active.scriptMode);chapterLabel.setText(currentTitle);if(readerHeader!=null)readerHeader.setText(currentTitle);if(active!=null&&(!currentTitle.equals(prefs.getString("lastChapter",""))||!active.id.equals(prefs.getString("lastBook",""))))prefs.edit().putString("lastBook",active.id).putString("lastChapter",currentTitle).apply();
         if(progress!=null && !restoring) progress.setProgress((int)(1000.0*offset/Math.max(1,document.text.length()-1)));
         String where=document.numberedChapters.isEmpty()?"正文":String.format(Locale.CHINA,"章节 %d/%d",document.numberedOrdinalAt(offset),document.numberedChapters.size());
         String pageInfo=pagedReader==null?"":pagedReader.pageLabel()+" · ";
@@ -1079,7 +1081,7 @@ public final class MainActivity extends Activity {
         Runnable preview=()->{
             summaries[0].run();if(nightTimes[0]!=null)nightTimes[0].setVisibility(autoNight.selected()==2?View.VISIBLE:View.GONE);previewNightMode=autoNight.selected();applyTypeset();palette=effectivePalette();
             ReaderTypography typography=new ReaderTypography(this,draft);typography.apply(sample);sample.setTextSize(draft.font);sample.setLineSpacing(0,draft.spacing);
-            String value="雪融，故事生长";sample.setText(typography.style(value,0,value.length(),sample.getTextSize(),getResources().getDisplayMetrics().density));
+            String value=ChineseText.label("雪融，故事生长",book.scriptMode);sample.setText(typography.style(value,0,value.length(),sample.getTextSize(),getResources().getDisplayMetrics().density));
             sample.setTextColor(isNight()?SnowTheme.NIGHT_INK:draft.palette==1?0xFF4B4238:SnowTheme.INK);sample.setPadding(dp(draft.margin),dp(12),dp(draft.margin),dp(12));
             sample.setBackground(SnowTheme.rounded(isNight()?SnowTheme.NIGHT_BACKGROUND:draft.palette==1?SnowTheme.WARM_PAPER:SnowTheme.PAPER,dp(16),SnowTheme.BORDER,dp(1)));
             if(!isDestroyed()&&active==book){capturePage();showReader(offset);revealPage();}
@@ -1090,6 +1092,25 @@ public final class MainActivity extends Activity {
         };
 
         ChoiceStrip faces=new ChoiceStrip(typesetContext,new String[]{"内置宋体","黑体","系统"},draft.fontFamily,isNight());fonts.body.addView(faces);
+        fonts.body.addView(sectionLabel("简繁显示（仅本书）"));
+        ChoiceStrip script=new ChoiceStrip(typesetContext,new String[]{"原文","简体","繁體"},book.scriptMode,isNight());script.setTag("reading-script-mode");fonts.body.addView(script);
+        TextView scriptHint=text("离线转换正文和页眉，保留原文件。搜索、摘录面板、导出与听书沿用原文；正文系统复制取得显示文字。",12,muted);fonts.body.addView(scriptHint);
+        final int[] scriptTicket={0};
+        script.onChanged(()->{
+            final int mode=script.selected(),token=++scriptTicket[0];final String source=document.text;
+            if(mode==book.scriptMode){scriptHint.setText("已选择当前显示方式。");return;}
+            scriptHint.setText("正在准备简繁显示…");
+            io.execute(()->{
+                try {String converted=ChineseText.convert(getApplicationContext(),source,mode);
+                    runOnUiThread(()->{
+                        if(token!=scriptTicket[0]||isDestroyed()||active!=book||settings[0]==null||!settings[0].isShowing()||document.text!=source)return;
+                        int previous=book.scriptMode;
+                        synchronized(store){book.scriptMode=mode;try{store.save();}catch(Exception e){book.scriptMode=previous;script.select(previous);scriptHint.setText("未能保存，保留原显示："+message(e));return;}}
+                        readerText=converted;scriptHint.setText("已切换；原文、书签和笔记位置保持不变。");preview.run();
+                    });
+                }catch(Exception e){runOnUiThread(()->{if(token==scriptTicket[0]&&active==book&&settings[0]!=null&&settings[0].isShowing()){script.select(book.scriptMode);scriptHint.setText("转换失败，保留原显示："+message(e));}});}
+            });
+        });
         Button customFont=button("自定义字体 · "+(draft.customFont.isEmpty()?"未选用":FontLibrary.name(this,draft.customFont)),()->chooseCustomFont(draft.customFont,id->{if(active!=book||settings[0]==null||!settings[0].isShowing())return;draft.customFont=id;pitch[0].run();preview.run();}));customFont.setMaxLines(1);customFont.setEllipsize(TextUtils.TruncateAt.END);fonts.body.addView(customFont);
         fonts.body.addView(text("导入本机 TTF / OTF 字体（最多20 MB）。字体文件不随书库备份，换机需重导入；缺失时回退内置字形。",12,muted));
         TextView font=sectionLabel("字号 · "+draft.font);fonts.body.addView(font);
@@ -1122,7 +1143,11 @@ public final class MainActivity extends Activity {
         from.setOnClickListener(v->editNightTime(times,0,from,"夜读开始"));until.setOnClickListener(v->editNightTime(times,1,until,"夜读结束"));
 
         ChoiceStrip modes=new ChoiceStrip(typesetContext,new String[]{"上下滚动","逐页翻阅"},pagedMode?1:0,isNight());reading.body.addView(modes);
-        ToggleRow motion=new ToggleRow(typesetContext,"滑动翻页动画",pageMotion,isNight());reading.body.addView(motion);
+        ToggleRow motion=new ToggleRow(typesetContext,"翻页动画",pageMotion,isNight());reading.body.addView(motion);
+        reading.body.addView(sectionLabel("分页效果（全局）"));
+        ChoiceStrip pageEffect=new ChoiceStrip(typesetContext,new String[]{"平移滑动","仿真卷页"},prefs.getInt("pageEffect",1)==1?1:0,isNight());pageEffect.setTag("reading-page-effect");reading.body.addView(pageEffect);
+        ToggleRow turnDust=new ToggleRow(typesetContext,"翻页完成 · 边框雪尘",prefs.getBoolean("pageSnowDust",true),isNight());turnDust.setTag("reading-page-snow");reading.body.addView(turnDust);
+        reading.body.addView(text("仅分页且开启动画时生效；减少动效时关闭卷页与雪尘。",12,muted));
         reading.body.addView(sectionLabel("左右滑动方向"));ChoiceStrip swipeDirection=new ChoiceStrip(typesetContext,new String[]{"左滑下一页","右滑下一页"},prefs.getBoolean("rightSwipeNext",false)?1:0,isNight());swipeDirection.setTag("reading-swipe-direction");reading.body.addView(swipeDirection);
         ToggleRow reduce=new ToggleRow(typesetContext,"减少动效",prefs.getBoolean("reduceMotion",false),isNight());reading.body.addView(reduce);
 
@@ -1170,7 +1195,7 @@ public final class MainActivity extends Activity {
             draft.awake=awake.checked();draft.indent=indent.checked();draft.paragraphGap=paragraph.getProgress();Typeset before=book.typeset;
             synchronized(store){book.typeset=scope.checked()?draft.copy():null;try{store.save();if(!scope.checked())saveGlobalTypeset(draft);}catch(Exception e){book.typeset=before;toast("排版未保存："+message(e));}}
             pagedMode=modes.selected()==1;pageMotion=motion.checked();
-            prefs.edit().putBoolean("pagedMode",pagedMode).putBoolean("pageMotion",pageMotion).putBoolean("rightSwipeNext",swipeDirection.selected()==1).putBoolean("twoFingerBrightness",twoFinger.checked()).putBoolean("doubleBookmark",doubleMark.checked()).putBoolean("verticalPages",vertical.checked()).putBoolean("volumePages",volume.checked()).putBoolean("volumeRepeat",repeat.checked()).putBoolean("fullscreen",fullscreen.checked()).putBoolean("leftHand",leftHand.checked()).putBoolean("reduceMotion",reduce.checked()).putInt("orientation",direction.selected()).putInt("autoNight",autoNight.selected()).putInt("nightStart",times[0]).putInt("nightEnd",times[1]).apply();previewTypeset=null;previewNightMode=null;
+            prefs.edit().putBoolean("pagedMode",pagedMode).putBoolean("pageMotion",pageMotion).putInt("pageEffect",pageEffect.selected()).putBoolean("pageSnowDust",turnDust.checked()).putBoolean("rightSwipeNext",swipeDirection.selected()==1).putBoolean("twoFingerBrightness",twoFinger.checked()).putBoolean("doubleBookmark",doubleMark.checked()).putBoolean("verticalPages",vertical.checked()).putBoolean("volumePages",volume.checked()).putBoolean("volumeRepeat",repeat.checked()).putBoolean("fullscreen",fullscreen.checked()).putBoolean("leftHand",leftHand.checked()).putBoolean("reduceMotion",reduce.checked()).putInt("orientation",direction.selected()).putInt("autoNight",autoNight.selected()).putInt("nightStart",times[0]).putInt("nightEnd",times[1]).apply();previewTypeset=null;previewNightMode=null;
             if(!tearingDown&&!isDestroyed()&&!isFinishing()&&active==book){showReader(offset);applyReaderWindow();if(recolor[0])appearance(savedScroll[0]);}
         }).show();
         if(restoreScroll>0)panel.addOnLayoutChangeListener(new View.OnLayoutChangeListener(){public void onLayoutChange(View v,int l,int t,int r,int b,int ol,int ot,int or,int ob){panel.removeOnLayoutChangeListener(this);if(panel.getParent() instanceof ScrollView)((ScrollView)panel.getParent()).scrollTo(0,restoreScroll);}});
@@ -1271,7 +1296,8 @@ public final class MainActivity extends Activity {
     }
     private void removeToRecycle(LibraryStore.Book book){
         if(busy)return;if(listenUi!=null)listenUi.stopIfBook(book.id);busy=true;showLoading("正在保存可撤销的副本…");
-        io.execute(()->{try{RecycleBin.Entry entry=recycleBin.remove(store,book,System.currentTimeMillis());repository.invalidate();runOnUiThread(()->{hideLoading();busy=false;if(isDestroyed())return;coverCache.remove(book.id);showLibrary(shelfQuery);dialog().setTitle("已移入回收站").setMessage("「"+book.title+"」保留 7 天，可在“更多 → 回收站”恢复。").setPositiveButton("撤销移出",(d,w)->restoreRecycled(entry)).show();});}catch(Exception e){runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())error("移出失败，书籍保留",e);});}});
+        io.execute(()->{try{RecycleBin.Entry entry=recycleBin.remove(store,book,System.currentTimeMillis());repository.invalidate();
+                runOnUiThread(()->{hideLoading();busy=false;if(isDestroyed())return;coverCache.remove(book.id);showLibrary(shelfQuery);dialog().setTitle("已移入回收站").setMessage("「"+book.title+"」保留 7 天，可在“更多 → 回收站”恢复。").setPositiveButton("撤销移出",(d,w)->restoreRecycled(entry)).show();});}catch(Exception e){runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())error("移出失败，书籍保留",e);});}});
     }
     private void showRecycleBin(){
         if(busy)return;busy=true;showLoading("正在读取回收站…");io.execute(()->{ArrayList<RecycleBin.Entry> entries=recycleBin.list(System.currentTimeMillis());long recycleBytes=recycleBin.bytes();runOnUiThread(()->{hideLoading();busy=false;if(isDestroyed())return;String[] labels=new String[entries.size()];for(int i=0;i<labels.length;i++){RecycleBin.Entry e=entries.get(i);long days=Math.max(1,(RecycleBin.RETENTION-(System.currentTimeMillis()-e.removedAt)+86400000-1)/86400000);labels[i]=e.book.title+" · 约 "+days+" 天后清理";}
@@ -1284,8 +1310,7 @@ public final class MainActivity extends Activity {
     private void restoreBatch(ArrayList<RecycleBin.Entry> entries){
         if(busy||entries.isEmpty())return;busy=true;showLoading("正在把 "+entries.size()+" 本书放回书架…");
         io.execute(()->{try{
-                for(RecycleBin.Entry entry:entries)recycleBin.restore(store,entry);repository.invalidate();
-                runOnUiThread(()->{hideLoading();busy=false;if(isDestroyed())return;for(RecycleBin.Entry entry:entries)coverCache.remove(entry.book.id);showLibrary(shelfQuery);toast("已放回书架");});
+                for(RecycleBin.Entry entry:entries)recycleBin.restore(store,entry);repository.invalidate();runOnUiThread(()->{hideLoading();busy=false;if(isDestroyed())return;for(RecycleBin.Entry entry:entries)coverCache.remove(entry.book.id);showLibrary(shelfQuery);toast("已放回书架");});
             }catch(Exception e){runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed()){showLibrary(shelfQuery);error("部分书籍未能恢复，其余已放回，可在回收站查看",e);}});}});
     }
     private void copySentence(int requested){
@@ -1347,8 +1372,9 @@ public final class MainActivity extends Activity {
         TextView sample=text(decoded.text.substring(0,Math.min(200,decoded.text.length())),14,ink);sample.setTextIsSelectable(true);
         dialog().setTitle(replacement==null?"确认切换编码":"确认替换正文").setMessage(message).setView(sample).setPositiveButton("应用并保留阅读记录",(d,w)->{
             if(busy)return;busy=true;showLoading("正在保存阅读位置与书签…");io.execute(()->{RecycleBin.Entry archived=null;try{
+                String converted=ChineseText.convert(getApplicationContext(),decoded.text,book.scriptMode);
                 LibraryStore.Book updated=book;if(replacement==null)store.reencode(book,decoded,plan);else{archived=recycleBin.archive(store,book,System.currentTimeMillis());updated=store.replaceContent(book,replacement,filename,decoded,plan);}final LibraryStore.Book result=updated;repository.adopt(result,decoded);
-                runOnUiThread(()->{hideLoading();busy=false;if(isDestroyed())return;coverCache.remove(book.id);if(active==book){active=result;document=decoded;highlight=-1;searchTerm="";navigation.clear();showReader(plan.offset);}else showLibrary(shelfQuery);toast(plan.unresolved.isEmpty()?"阅读记录已保留":"部分书签待定位，可在书签面板处理");});
+                runOnUiThread(()->{hideLoading();busy=false;if(isDestroyed())return;coverCache.remove(book.id);if(active==book){active=result;document=decoded;readerText=converted;highlight=-1;searchTerm="";navigation.clear();showReader(plan.offset);}else showLibrary(shelfQuery);toast(plan.unresolved.isEmpty()?"阅读记录已保留":"部分书签待定位，可在书签面板处理");});
             }catch(Exception e){if(archived!=null)try{recycleBin.delete(archived);}catch(Exception ignored){}runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())error("没有保存成功，原记录保留",e);});}});
         }).show();
     }
@@ -1498,7 +1524,7 @@ public final class MainActivity extends Activity {
                 public void onDestroyActionMode(ActionMode mode){}
                 public boolean onActionItemClicked(ActionMode mode,MenuItem item){if(item.getItemId()!=0x534e01&&item.getItemId()!=0x534e02)return false;int a=view.getSelectionStart(),b=view.getSelectionEnd();if(a<0||b<0||a==b)return true;int from=selectionBase+Math.min(a,b),until=selectionBase+Math.max(a,b);mode.finish();chromeHandler.post(()->{if(active!=selectedBook||document!=selectedDocument)return;if(item.getItemId()==0x534e01)editNote(null,from,until);else listenUi.startAt(from);});return true;}
             });
-            String body=document.row(p);int start=document.starts.get(p);SpannableString styled=new ReaderTypography(MainActivity.this,effectiveTypeset(),active.annotations).style(document.text,start,start+body.length(),view.getTextSize(),getResources().getDisplayMetrics().density);
+            String body=document.row(p);int start=document.starts.get(p);SpannableString styled=new ReaderTypography(MainActivity.this,effectiveTypeset(),active.annotations).style(readerText,start,start+body.length(),view.getTextSize(),getResources().getDisplayMetrics().density);
             if (highlight>=0 && !searchTerm.isEmpty()) {
                 int a=Math.max(0,highlight-start),b=Math.min(body.length(),highlight-start+searchTerm.length());
                 if (b>a && highlight<start+body.length() && highlight+searchTerm.length()>start) styled.setSpan(new BackgroundColorSpan(palette==2?0xFF71612D:0xFFE7D69D),a,b,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
