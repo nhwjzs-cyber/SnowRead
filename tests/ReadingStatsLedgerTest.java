@@ -15,7 +15,7 @@ public final class ReadingStatsLedgerTest {
             throw new UnsupportedOperationException(name);
         });
     }
-    public static void main(String[] args){TimeZone old=TimeZone.getDefault();try{TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
+    public static void main(String[] args)throws Exception{TimeZone old=TimeZone.getDefault();try{TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
         Map<String,Object> values=new HashMap<>();values.put("day:2020-01-01",123000L);Clock clock=new Clock();Calendar calendar=Calendar.getInstance();calendar.set(2026,9,31,23,59,55);calendar.set(Calendar.MILLISECOND,0);clock.wall=calendar.getTimeInMillis();
         String a=String.join("",Collections.nCopies(64,"a")),b=String.join("",Collections.nCopies(64,"b"));ReadingStats stats=new ReadingStats(preferences(values),clock);
         stats.pulse(true,clock.elapsed,a);clock.advance(15000);stats.pulse(false,clock.elapsed,a);
@@ -28,6 +28,14 @@ public final class ReadingStatsLedgerTest {
         stats.pulse(true,clock.elapsed,a);clock.advance(120000);stats.pulse(false,clock.elapsed,a);check(stats.total()-before==20000);
         before=stats.total();stats.enabled(false);stats.pulse(true,clock.elapsed,b);clock.advance(15000);stats.pulse(true,clock.elapsed,b);check(stats.total()==before);
         stats.clear();check(!stats.enabled()&&stats.total()==0&&stats.books("2026-11-01").isEmpty());
+        stats.enabled(true);values.put("day:2026-10-31",10000L);values.put("book:2026-10-31:"+a,10000L);
+        org.json.JSONObject snapshot=stats.snapshot();values.put("day:2026-10-31",99999L);stats.restoreSnapshot(snapshot);
+        check(stats.day("2026-10-31")==10000);check(stats.books("2026-10-31").get(a)==10000);stats.restoreSnapshot(snapshot);check(stats.total()==10000);
+        String[] invalid={"day:2026-02-30","book:2026-10-31:../../bad","secret"};
+        for(String key:invalid){org.json.JSONObject broken=new org.json.JSONObject().put(key,1L);try{stats.restoreSnapshot(broken);throw new AssertionError("invalid record accepted");}catch(java.io.IOException expected){check(stats.total()==10000);}}
+        try{stats.restoreSnapshot(new org.json.JSONObject().put("day:2026-10-31",-1));throw new AssertionError();}catch(java.io.IOException expected){check(stats.total()==10000);}
+        try{stats.restoreSnapshot(new org.json.JSONObject().put("day:2026-10-31","100"));throw new AssertionError();}catch(java.io.IOException expected){check(stats.total()==10000);}
+        stats.restoreSnapshot(new org.json.JSONObject().put("enabled",false).put("day:2020-01-01",123000L));check(!stats.enabled()&&stats.day("2020-01-01")==123000&&stats.day("2026-10-31")==0);
         System.out.println("ReadingStatsLedgerTest: "+checks+" checks passed; production midnight split, book ownership, idle cap, disabled and nonreading intervals, legacy totals and clear");
     }finally{TimeZone.setDefault(old);}}
 }

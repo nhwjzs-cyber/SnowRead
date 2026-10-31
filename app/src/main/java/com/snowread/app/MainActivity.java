@@ -355,10 +355,10 @@ public final class MainActivity extends Activity {
     private int activeLightPeriod(android.content.SharedPreferences settings){int sel=Math.max(0,Math.min(4,settings.getInt("time",0)));return sel==0?AtmosphereView.period(this):sel-1;}
     private void clearLegacyPrivacy(){android.content.SharedPreferences.Editor weather=getSharedPreferences("atmosphere",0).edit();for(String key:PrivacyPolicy.WEATHER_CACHE)weather.remove(key);weather.apply();getSharedPreferences("listen",0).edit().remove("allowNetworkVoice").apply();}
     /** Global preferences snapshot embedded in backups: reader, atmosphere and listen settings. */
-    private byte[] captureSettingsBytes(){
+    private byte[] captureSettingsBytes() throws Exception {
         try{
             org.json.JSONObject root=new org.json.JSONObject();
-            for(String name:new String[]{"reader","atmosphere","listen"}){
+            for(String name:new String[]{"reader","atmosphere","listen","font-library"}){
                 org.json.JSONObject group=new org.json.JSONObject();
                 for(Map.Entry<String,?> entry:getSharedPreferences(name,MODE_PRIVATE).getAll().entrySet()){
                     if(!PrivacyPolicy.keepSetting(name,entry.getKey()))continue;Object value=entry.getValue();
@@ -370,12 +370,13 @@ public final class MainActivity extends Activity {
                 }
                 root.put(name,group);
             }
-            return root.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        }catch(Exception e){return null;}
+            if(prefs.getBoolean("backupReadingStats",false))root.put("readingStats",new ReadingStats(this).snapshot());
+            byte[] bytes=root.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);if(bytes.length>BackupArchive.MAX_SETTINGS)throw new IOException("设置与统计记录超过备份大小限制");return bytes;
+        }catch(Exception e){throw e;}
     }
     private void applySettings(org.json.JSONObject root){
         try{
-            for(String name:new String[]{"reader","atmosphere","listen"}){
+            for(String name:new String[]{"reader","atmosphere","listen","font-library"}){
                 org.json.JSONObject group=root.optJSONObject(name);if(group==null)continue;
                 android.content.SharedPreferences.Editor editor=getSharedPreferences(name,MODE_PRIVATE).edit();
                 java.util.Iterator<String> keys=group.keys();
@@ -642,11 +643,14 @@ public final class MainActivity extends Activity {
     }
     private void dataOptions() {
         if(busy)return;
-        AppSheet.Builder builder=dialog().setSnowflakes(true).setTitle("备份与数据管理").setMessage("备份包含全部书籍、封面、分类、置顶、书签和进度，保存在你选择的位置。备份同时包含全局设置，恢复时可以选择是否应用。");
+        AppSheet.Builder builder=dialog().setSnowflakes(true).setTitle("备份与数据管理").setMessage("备份包含全部书籍、封面、分类、置顶、书签和进度，保存在你选择的位置。备份包含全局设置；可选择同时备份阅读统计，恢复时分别确认是否应用。");
         AppSheet[] handle=new AppSheet[1];
         LinearLayout panel=column();
         SettingsSection backup=new SettingsSection(uiContext(),"data-backup","备份与恢复","导出 ZIP · 恢复或合并",uiDark());
         backup.body.addView(button("导出整库备份 ZIP",first(handle,()->{Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType("application/zip");intent.putExtra(Intent.EXTRA_TITLE,"融雪阅读-备份-"+new java.text.SimpleDateFormat("yyyyMMdd-HHmmss",Locale.CHINA).format(new Date())+".zip");launchPicker(intent,CREATE_BACKUP);})));
+        backup.body.addView(text("备注、阅读状态、划线和 EPUB 随书籍备份。自定义字体文件也会备份；回收站暂不包含。",12,muted));
+        ToggleRow statsBackup=new ToggleRow(uiContext(),"备份同时包含阅读统计",prefs.getBoolean("backupReadingStats",false),uiDark());
+        statsBackup.onChanged(()->prefs.edit().putBoolean("backupReadingStats",statsBackup.checked()).apply());backup.body.addView(statsBackup);
         backup.body.addView(button("从备份恢复 / 合并",first(handle,()->{Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType("*/*");launchPicker(intent,PICK_BACKUP);})));
         SettingsSection importing=new SettingsSection(uiContext(),"data-import","批量导入","文件选择器 · 整个文件夹",uiDark());
         importing.body.addView(button("Wi-Fi 局域网传书",first(handle,()->lanTransfer())));
@@ -670,7 +674,7 @@ public final class MainActivity extends Activity {
                 byte[] settings=captureSettingsBytes();
                 try(OutputStream out=new FileOutputStream(temporary)){BackupArchive.export(store,settings,out,task);}
                 try(InputStream in=new FileInputStream(temporary);OutputStream out=getContentResolver().openOutputStream(uri,"wt")){BackupArchive.copyTracked(in,out,BackupArchive.MAX_TOTAL+16L*1024*1024,task,0,(int)temporary.length(),"正在写入所选位置…");}
-                task.beginCommit();runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())successSheet("备份已导出","书籍、封面、分类、置顶、进度和书签已保存在所选位置。\n备份同时包含全局设置，恢复时可以选择是否应用。");});
+                task.beginCommit();runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())successSheet("备份已导出","书籍、封面、分类、置顶、进度和书签已保存在所选位置。\n备份包含全局设置；可选择同时备份阅读统计，恢复时分别确认是否应用。");});
             }catch(Exception e){runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())taskFailure("未能完整导出，请重新备份",e,uri);});}
             finally{if(temporary!=null)temporary.delete();}
         });
@@ -696,11 +700,18 @@ public final class MainActivity extends Activity {
         final org.json.JSONObject incomingSettings=prepared.settings;
         io.execute(()->{
             try{LibraryStore restored=BackupArchive.restore(prepared,store,merge,useBackup,task);
-                repository.replace(restored);runOnUiThread(()->{store=restored;hideLoading();busy=false;if(isDestroyed())return;coverCache.evictAll();selectedBooks.clear();selecting=false;shelfCategory=ShelfOrganization.ALL;showLibrary("");successSheet("恢复完成","当前书架共 "+store.books.size()+" 本书，阅读记录已恢复。");
-                    if(incomingSettings!=null)dialog().setTitle("应用备份中的全局设置？").setMessage("这份备份包含全局设置（排版、外观、氛围、听书偏好等）。应用后会覆盖当前的同名设置。").setPositiveButton("应用",(a,b)->{applySettings(incomingSettings);toast("全局设置已应用");}).setNegativeButton("暂不",null).show();});
+                repository.replace(restored);runOnUiThread(()->{store=restored;FontLibrary.resetCache();hideLoading();busy=false;if(isDestroyed())return;coverCache.evictAll();selectedBooks.clear();selecting=false;shelfCategory=ShelfOrganization.ALL;showLibrary("");successSheet("恢复完成","当前书架共 "+store.books.size()+" 本书，阅读记录已恢复。");
+                    if(incomingSettings!=null)restoreExtraSettings(incomingSettings);});
             }catch(Exception e){runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())taskFailure("恢复未完成，请查看原因",e,null);});}
             finally{prepared.close();if(preparedBackup==prepared)preparedBackup=null;}
         });
+    }
+    private void restoreExtraSettings(org.json.JSONObject data){
+        LinearLayout panel=column();ToggleRow settings=new ToggleRow(uiContext(),"应用全局设置",false,uiDark());panel.addView(settings);
+        org.json.JSONObject history=data.optJSONObject("readingStats");ToggleRow stats=new ToggleRow(uiContext(),"恢复阅读统计（覆盖当前统计）",false,uiDark());if(history!=null)panel.addView(stats);
+        dialog().setTitle("恢复附加数据").setMessage("书架已恢复。以下项目由你单独选择；不勾选会保留当前设置和统计。覆盖统计不会叠加时长，重复恢复也不会重复计数。").setView(panel).setPositiveButton("应用所选",(d,w)->{
+            try{if(history!=null&&stats.checked())new ReadingStats(this).restoreSnapshot(history);if(settings.checked()){applySettings(data);showLibrary(shelfQuery);}toast("所选附加数据已处理");}catch(Exception e){error("附加数据未完整恢复",e);}
+        }).setNegativeButton("保留当前",null).show();
     }
     private void chooseEpubExport(LibraryStore.Book book){
         if(busy)return;savePosition();pendingEpubBookId=book.id;

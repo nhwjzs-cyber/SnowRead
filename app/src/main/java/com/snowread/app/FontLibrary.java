@@ -15,11 +15,11 @@ final class FontLibrary {
     static boolean validId(String id){return id!=null&&(id.isEmpty()||id.matches("[a-f0-9]{64}"));}
     private static File home(Context c){return new File(c.getFilesDir(),"user-fonts");}
     static synchronized String name(Context c,String id){return c.getSharedPreferences("font-library",0).getString(id,"自定义字体")+(missing.contains(id)?"（不可用，已回退）":"");}
-    static ArrayList<String> ids(Context c){ArrayList<String> result=new ArrayList<>();File[] files=home(c).listFiles();if(files!=null)for(File f:files){String n=f.getName();if(n.endsWith(".font")){String id=n.substring(0,n.length()-5);if(validId(id)&&!id.isEmpty())result.add(id);}}Collections.sort(result,(a,b)->name(c,a).compareToIgnoreCase(name(c,b)));return result;}
+    static ArrayList<String> ids(Context c){ArrayList<String> result=new ArrayList<>();File[] files;try{files=PortableFonts.files(new File(c.getFilesDir(),"library")).values().toArray(new File[0]);}catch(IOException e){files=new File[0];}if(files!=null)for(File f:files){String n=f.getName();if(n.endsWith(".font")){String id=n.substring(0,n.length()-5);if(validId(id)&&!id.isEmpty())result.add(id);}}Collections.sort(result,(a,b)->name(c,a).compareToIgnoreCase(name(c,b)));return result;}
     static synchronized Typeface face(Context c,Typeset t){
         if(!t.customFont.isEmpty()&&validId(t.customFont)){
             Typeface known=cache.get(t.customFont);if(known!=null)return known;
-            if(!missing.contains(t.customFont)){File f=new File(home(c),t.customFont+".font");if(f.isFile())try{Typeface face=Typeface.createFromFile(f);cache.put(t.customFont,face);return face;}catch(RuntimeException ignored){}missing.add(t.customFont);}
+            if(!missing.contains(t.customFont)){File f=new File(home(c),t.customFont+".font");if(!f.isFile())f=new File(c.getFilesDir(),"library/fonts/"+t.customFont+".font");if(f.isFile())try{Typeface face=Typeface.createFromFile(f);cache.put(t.customFont,face);return face;}catch(RuntimeException ignored){}missing.add(t.customFont);}
         }
         return t.fontFamily==1?Typeface.SANS_SERIF:t.fontFamily==2?Typeface.DEFAULT:BundledFont.serif(c);
     }
@@ -39,5 +39,6 @@ final class FontLibrary {
             c.getSharedPreferences("font-library",0).edit().putString(id,filename.length()>120?filename.substring(0,120):filename).apply();return id;
         }finally{temp.delete();}
     }
-    static synchronized void remove(Context c,String id)throws IOException{if(!validId(id)||id.isEmpty())throw new IOException("字体标识无效");File f=new File(home(c),id+".font");new AtomicFile(f).delete();if(f.exists())throw new IOException("无法移除字体");cache.remove(id);missing.add(id);c.getSharedPreferences("font-library",0).edit().remove(id).apply();}
+    static synchronized void resetCache(){cache.clear();missing.clear();}
+    static synchronized void remove(Context c,String id)throws IOException{if(!validId(id)||id.isEmpty())throw new IOException("字体标识无效");File f=new File(home(c),id+".font");new AtomicFile(f).delete();if(f.exists())throw new IOException("无法移除字体");File restored=new File(c.getFilesDir(),"library/fonts/"+id+".font");new AtomicFile(restored).delete();if(restored.exists())throw new IOException("无法移除恢复的字体");cache.remove(id);missing.add(id);c.getSharedPreferences("font-library",0).edit().remove(id).apply();}
 }

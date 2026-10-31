@@ -33,5 +33,29 @@ final class ReadingStats {
     long total(){long sum=0;for(Map.Entry<String,?> e:prefs.getAll().entrySet())if(e.getKey().matches("day:\\d{4}-\\d{2}-\\d{2}")&&e.getValue() instanceof Long)sum+=Math.max(0,(Long)e.getValue());return sum;}
     void enabled(boolean value){prefs.edit().putBoolean("enabled",value).apply();counter=new ReadingTimeCounter();owner="";}
     void clear(){boolean on=enabled();prefs.edit().clear().putBoolean("enabled",on).apply();counter=new ReadingTimeCounter();owner="";}
+    static final int MAX_BACKUP_RECORDS=20000;
+    org.json.JSONObject snapshot()throws Exception {
+        org.json.JSONObject data=new org.json.JSONObject();
+        for(Map.Entry<String,?> e:prefs.getAll().entrySet())if(validRecord(e.getKey(),e.getValue()))data.put(e.getKey(),e.getValue());
+        validateSnapshot(data);return data;
+    }
+    private static boolean validRecord(String key,Object value){
+        if("enabled".equals(key))return value instanceof Boolean;
+        if(!(value instanceof Long)&&!(value instanceof Integer))return false;
+        if(!key.matches("(?:day|first|last):\\d{4}-\\d{2}-\\d{2}|book:\\d{4}-\\d{2}-\\d{2}:[a-f0-9]{64}"))return false;
+        String day=key.substring(key.indexOf(':')+1,key.indexOf(':')+11);
+        try{java.text.SimpleDateFormat f=new java.text.SimpleDateFormat("yyyy-MM-dd",Locale.ROOT);f.setLenient(false);if(!f.format(f.parse(day)).equals(day))return false;}catch(Exception ex){return false;}
+        long n=((Number)value).longValue();return n>=0&&n<=(key.startsWith("first:")||key.startsWith("last:")?253402300799999L:90000000L);
+    }
+    static void validateSnapshot(org.json.JSONObject data)throws Exception {
+        if(data.length()>MAX_BACKUP_RECORDS)throw new java.io.IOException("阅读统计记录过多，暂时无法备份");
+        for(Iterator<String> it=data.keys();it.hasNext();){String key=it.next();if(!validRecord(key,data.get(key)))throw new java.io.IOException("备份中的阅读统计记录无效");}
+    }
+    void restoreSnapshot(org.json.JSONObject data)throws Exception {
+        validateSnapshot(data);SharedPreferences.Editor edit=prefs.edit().clear();
+        for(Iterator<String> it=data.keys();it.hasNext();){String key=it.next();Object value=data.get(key);if(value instanceof Boolean)edit.putBoolean(key,(Boolean)value);else edit.putLong(key,((Number)value).longValue());}
+        if(!edit.commit())throw new java.io.IOException("未能保存阅读统计，请重试");
+        counter=new ReadingTimeCounter();owner="";
+    }
     static String duration(long ms){long seconds=Math.max(0,ms)/1000;return seconds<60?seconds+" 秒":seconds/3600>0?seconds/3600+" 小时 "+seconds/60%60+" 分钟":seconds/60+" 分钟";}
 }

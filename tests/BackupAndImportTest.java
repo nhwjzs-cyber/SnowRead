@@ -30,6 +30,9 @@ public final class BackupAndImportTest {
         File cover=original.cover(a);check(cover.getParentFile().mkdirs());byte[] picture={(byte)255,(byte)216,1,2,(byte)255,(byte)217};Files.write(cover.toPath(),picture);
         String tracking=original.organization.add("正在追");a.categoryIds.add(tracking);original.save();
         byte[] archive=export(original);check(entries(archive).size()==5);
+        LinkedHashMap<String,byte[]> withStats=entries(archive);withStats.put("settings.json",utf(new JSONObject().put("readingStats",new JSONObject().put("day:2026-10-31",12000L)).toString()));
+        try(BackupArchive.Prepared prepared=prepare(zip(withStats),fresh())){check(prepared.settings.getJSONObject("readingStats").getLong("day:2026-10-31")==12000L);}
+        withStats.put("settings.json",utf(new JSONObject().put("readingStats",new JSONObject().put("day:2026-02-30",12000L)).toString()));reject(()->prepare(zip(withStats),fresh()));
         LibraryStore target=fresh();String localCategory=target.organization.add("小说");LibraryStore.Book local=add(target,"本地书名",body);local.offset=2;local.categoryIds.add(localCategory);local.pinned=false;target.save();LibraryStore.Book onlyLocal=add(target,"只在本机","第一章 本机\n这是本机独有的一本书。");
         try(BackupArchive.Prepared p=prepare(archive,target)) {
             check(p.store.books.size()==2&&p.store.organization.categories.containsKey(empty));
