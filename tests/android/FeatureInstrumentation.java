@@ -73,8 +73,28 @@ public final class FeatureInstrumentation extends Instrumentation {
         testAtmosphere(context,store.find(a.id));
         testReaderFurniture(context,store.find(a.id));
         testScriptAndCurl(context,store.find(a.id));
+        testEpubAndStats(context,store);
     }
     private int currentReadingOffset()throws Exception{Method method=MainActivity.class.getDeclaredMethod("position");method.setAccessible(true);return (Integer)method.invoke(activity);}
+    private void testEpubAndStats(Context context,LibraryStore store)throws Exception{
+        ByteArrayOutputStream bytes=new ByteArrayOutputStream();
+        String[] paths={"mimetype","META-INF/container.xml","book.opf","chapter.xhtml"};
+        StringBuilder body=new StringBuilder("<!DOCTYPE html><html xmlns='http://www.w3.org/1999/xhtml'><body><h1>雪融时</h1>");for(int i=0;i<100;i++)body.append("<p>离线 EPUB 正文，故事生长。段落 ").append(i).append("</p>");body.append("</body></html>");
+        String[] values={"application/epub+zip","<container xmlns='urn:oasis:names:tc:opendocument:xmlns:container'><rootfiles><rootfile full-path='book.opf'/></rootfiles></container>","<package xmlns='http://www.idpf.org/2007/opf'><metadata xmlns:dc='http://purl.org/dc/elements/1.1/'><dc:title>Native EPUB</dc:title></metadata><manifest><item id='c' href='chapter.xhtml' media-type='application/xhtml+xml'/></manifest><spine><itemref idref='c'/></spine></package>",body.toString()};
+        try(java.util.zip.ZipOutputStream zip=new java.util.zip.ZipOutputStream(bytes)){for(int i=0;i<paths.length;i++){zip.putNextEntry(new java.util.zip.ZipEntry(paths[i]));zip.write(values[i].getBytes(StandardCharsets.UTF_8));zip.closeEntry();}}
+        LibraryStore.Book book=store.add(bytes.toByteArray(),"native.epub",null);check(book.epub(),"native EPUB parser and format metadata");
+        ui(()->set(activity,"pagedMode",false));open(book);
+        ui(()->{TextDocument doc=(TextDocument)field(activity,"document");check(doc.text.contains("离线 EPUB 正文"),"EPUB opens in existing scroll reader");check(doc.chapters.get(0).title.equals("雪融时"),"EPUB heading fallback directory");});
+        String today=ReadingStatsData.day(System.currentTimeMillis());context.getSharedPreferences("reading-stats",0).edit().putLong("day:2020-01-01",123000).apply();ReadingStats sample=new ReadingStats(context);sample.enabled(true);sample.pulse(true,SystemClock.elapsedRealtime(),book.id);SystemClock.sleep(60);sample.pulse(false,SystemClock.elapsedRealtime(),book.id);
+        check(sample.books(today).containsKey(book.id),"daily per-book duration is recorded");check(sample.day("2020-01-01")==123000&&sample.books("2020-01-01").isEmpty(),"legacy totals preserved without invented book history");
+        ui(()->{invoke("showReadingStats",new Class<?>[0]);check((Boolean)field(activity,"statsPage"),"statistics is a page");check(field(activity,"active")==null,"statistics does not count as reading");check(activity.findViewById(android.R.id.content).findViewWithTag("reading-stats-heatmap")!=null,"calendar visible");});
+        long before=sample.today();ui(()->invoke("statsPulse",new Class<?>[0]));SystemClock.sleep(60);ui(()->invoke("statsPulse",new Class<?>[0]));check(sample.today()==before,"statistics browsing excluded from reading time");
+        ui(()->invoke("leaveStats",new Class<?>[0]));await(()->field(activity,"active")==book&&!(Boolean)field(activity,"busy"));
+        ui(()->{
+            int w=320,h=640,paper=0xFF172029;android.text.TextPaint ink=new android.text.TextPaint(Paint.ANTI_ALIAS_FLAG);ink.setColor(Color.WHITE);ink.setTextSize(18);ReaderTypography type=new ReaderTypography(context);android.text.StaticLayout page=type.layout("正文",ink,w-48,1);
+            for(int direction:new int[]{-1,1}){Bitmap bitmap=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);new PageCurlRenderer().draw(new Canvas(bitmap),page,page,w,h,.5f,direction,paper,24,12);int x=direction>0?12:w-12;check(bitmap.getPixel(x,h/2)!=paper,"paper fold includes side margin instead of a stationary frame");for(int edge:new int[]{0,w-1})check(Color.red(bitmap.getPixel(edge,h-1))<80,"no white screen-edge strip at night");bitmap.recycle();}
+        });
+    }
     private void testScriptAndCurl(Context context,LibraryStore.Book book)throws Exception{
         book.scriptMode=2;open(book);
         ui(()->{
@@ -176,7 +196,7 @@ public final class FeatureInstrumentation extends Instrumentation {
         ui(()->{book.typeset=new Typeset();book.typeset.customFont=id;((LibraryStore)field(activity,"store")).save();});open(book);
         ui(()->{context.getSharedPreferences("reader",0).edit().putBoolean("reduceMotion",true).putString("readerSettingsGroup","font").apply();invoke("appearance",new Class<?>[0]);check(text(sheet(),"自定义字体")!=null,"font controls stay inside existing typography category");sheet().dismissNow();});await(()->field(activity,"previewTypeset")==null);
         FontLibrary.remove(context,id);check(FontLibrary.face(context,selected)==BundledFont.serif(context),"missing custom file falls back safely");
-        ui(()->{invoke("leaveReader",new Class<?>[0]);invoke("showReadingStats",new Class<?>[0]);check(text(sheet(),"今日")!=null,"local reading record has a compact summary");check(text(sheet(),"记录本地阅读时长")!=null,"time recording can be disabled");sheet().dismissNow();});sample.delete();bad.delete();
+        ui(()->{invoke("leaveReader",new Class<?>[0]);invoke("showReadingStats",new Class<?>[0]);check(activity.findViewById(android.R.id.content).findViewWithTag("reading-stats-heatmap")!=null,"local reading page has a calendar");check(activity.findViewById(android.R.id.content).findViewWithTag("reading-stats-enabled")!=null,"time recording can be disabled");invoke("leaveStats",new Class<?>[0]);});sample.delete();bad.delete();
     }
     private void testReadingThemeRefresh(Context context,LibraryStore.Book book)throws Exception{
         ui(()->{context.getSharedPreferences("reader",0).edit().putBoolean("reduceMotion",true).putInt("appearance",1).putInt("autoNight",0).putString("readerSettingsGroup","theme").apply();book.typeset=new Typeset();book.typeset.palette=0;book.typeset.font=26;((LibraryStore)field(activity,"store")).save();});open(book);

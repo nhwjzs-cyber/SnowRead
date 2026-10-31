@@ -2,7 +2,7 @@ package com.snowread.app;
 
 /** Conservative filename cleanup: retain ambiguous parenthesized literary titles. */
 final class TitleCleaner {
-    static String stem(String name){String title=name.replaceFirst("(?i)\\.txt$","");return title.replaceAll("\\s+"," ").trim();}
+    static String stem(String name){String title=name.replaceFirst("(?i)\\.(txt|epub)$","");return title.replaceAll("\\s+"," ").trim();}
     static String clean(String filename){
         String title=stem(filename);title=title.replaceFirst("(?i)[_\\s-]*(?:作者|著者)\\s*[:：].*$","");
         java.util.regex.Matcher m=java.util.regex.Pattern.compile("[【\\[（(]([^】\\]）)]*)[】\\]）)]").matcher(title);StringBuffer out=new StringBuffer();

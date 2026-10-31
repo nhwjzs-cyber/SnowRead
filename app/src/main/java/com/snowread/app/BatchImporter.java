@@ -27,7 +27,7 @@ final class BatchImporter {
             String name="第 "+(result.processed+1)+" 个文件";
             try {
                 name=source.name();progress.update(result.processed,result.total,name);
-                if(name==null||!name.toLowerCase(Locale.ROOT).endsWith(".txt"))throw new IOException("请选择 TXT 纯文本文件");
+                if(!EpubDocument.supported(name))throw new IOException("请选择 TXT 或 EPUB 文件");
                 byte[] bytes=TextDocument.readLimited(source.open());
                 LibraryStore.Book book=store.add(bytes,name,encoding,category);
                 if(known.add(book.id)){result.imported++;if(result.firstImported==null)result.firstImported=book;}else result.duplicates++;

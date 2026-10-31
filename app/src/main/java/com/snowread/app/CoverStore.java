@@ -25,7 +25,10 @@ final class CoverStore {
     void remove(String id) {new AtomicFile(file(id)).delete();}
     Bitmap thumbnail(String id) {
         if(!has(id)) return null;
-        BitmapFactory.Options options=new BitmapFactory.Options();options.inSampleSize=2;
+        BitmapFactory.Options bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;
+        try(InputStream in=new AtomicFile(file(id)).openRead()){BitmapFactory.decodeStream(in,null,bounds);}catch(IOException e){return null;}
+        if(bounds.outWidth<=0||bounds.outHeight<=0||bounds.outWidth>40000||bounds.outHeight>40000)return null;
+        BitmapFactory.Options options=new BitmapFactory.Options();options.inSampleSize=CoverGeometry.sampleSize(bounds.outWidth,bounds.outHeight,360);
         try(InputStream in=new AtomicFile(file(id)).openRead()) {return BitmapFactory.decodeStream(in,null,options);}
         catch(IOException e) {return null;}
     }

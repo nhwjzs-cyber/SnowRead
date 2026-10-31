@@ -2,13 +2,13 @@
 
 > 雪渐融，故事正生长。
 
-![版本](https://img.shields.io/badge/版本-v0.16.3%20测试版-blue)
+![版本](https://img.shields.io/badge/源码-v0.16.5%20本地测试版-blue)
 ![Android](https://img.shields.io/badge/Android-6.0%20及以上-green)
 ![授权](https://img.shields.io/badge/授权-非商业-orange)
 
-融雪阅读是一款以本地 TXT 小说阅读为主的原生 Android 阅读器，由个人开发维护。纸色阅读背景搭配冷色界面，支持分页与滚动两种阅读模式，设计上尽量克制：不设广告，不接入第三方统计与崩溃上报，书籍与阅读记录只保存在设备本地。
+融雪阅读是一款以本地 TXT / EPUB 文字阅读为主的原生 Android 阅读器，由个人开发维护。纸色阅读背景搭配冷色界面，支持分页与滚动两种阅读模式，设计上尽量克制：不设广告，不接入第三方统计与崩溃上报，书籍与阅读记录只保存在设备本地。
 
-当前源码：**v0.16.4（本地测试版，尚未发布）** · Android 6.0 / API 23 及以上 · 应用标识 `com.snowread.app`
+当前源码：**v0.16.5（本地测试版，尚未发布）** · Android 6.0 / API 23 及以上 · 应用标识 `com.snowread.app`
 
 **[前往 Releases 下载](https://github.com/nhwjzs-cyber/SnowRead/releases)**
 
@@ -28,10 +28,10 @@
 
 ## 功能
 
-- 本地 TXT 单本、批量和文件夹导入，书架分类、多分类、置顶与多选管理。
+- 本地 TXT / EPUB 单本、批量和文件夹导入，书架分类、多分类、置顶与多选管理。
 - 章节与分卷识别、目录跳转、阅读进度、书签和正文搜索；支持目录识别预览与按书选择识别规则。
 - 常驻页脚（默认开启）：进度、时间、电量；可选章节页眉（默认关闭），主题跟随阅读纸色。
-- 按日统计阅读时长，数据仅保存在本机。
+- 阅读统计页：近16周日历、每日按书时长与今日/本周/累计概览，数据仅保存在本机。
 - 分页与滚动阅读、仿真卷页与完成时边框雪尘、夜读模式、按书独立排版与自定义字体。
 - 按书离线简繁显示，保留原始 TXT、书签和笔记位置。
 - 选段高亮、下划线与备注，笔记统一管理并支持 Markdown 导出。
@@ -39,7 +39,7 @@
 - 整库备份与恢复、回收站，以及需手动开启的 Wi-Fi 局域网传书。
 - 可手动选择的天气氛围与本地时间光线效果，配合克制的融雪与新芽动效。
 
-EPUB 暂未支持。v0.16.4 新功能入口与验证边界见 [UPDATE-v0.16.4.md](UPDATE-v0.16.4.md)。
+支持本地无 DRM 的文字型 EPUB 2/3，包括目录和封面；复杂图文、固定版式及加密书籍暂不支持。单本最多12 MB，具体边界与验证见 [UPDATE-v0.16.5.md](UPDATE-v0.16.5.md)。
 
 ## 安装与数据
 
@@ -59,7 +59,7 @@ EPUB 暂未支持。v0.16.4 新功能入口与验证边界见 [UPDATE-v0.16.4.md
 
 ## 当前状态
 
-v0.16.3 为测试版。核心宿主回归、笔记、局域网真实回环 Socket 与隐私字段过滤检查已经通过；发布 APK 的签名、资源表压缩与对齐、非调试清单均已检查。0.16.2 的 Android 隔离仪器测试已经编译，0.16.3 的目录识别核心与存储回归已通过；当前版本尚未完成真机运行、抓包和视觉验收，请将它视为持续开发中的版本。发现问题欢迎通过 Issue 反馈。
+v0.16.5 为本地测试版，尚未上传 GitHub Release。EPUB 核心/存储、日历、统计记账与原核心回归通过；发布 APK 的签名、资源表与非调试清单已检查。新增 Android 回归已编译，尚未在设备执行；白边修复、实际视觉和兼容性仍需手机验收。发现问题欢迎通过 Issue 反馈。
 
 其他存储与界面验证记录见 [VALIDATION.md](VALIDATION.md)。
 
@@ -100,4 +100,4 @@ sh ./gradlew assembleDebug
 
 ---
 
-**In short:** SnowRead is a local-first TXT novel reader for Android, developed and maintained by an individual. No ads, no analytics, no account — books, notes and reading progress stay on the device. It offers paginated and scrolling reading, offline text-to-speech, highlights and notes with Markdown export, full-library backup, and LAN book transfer. The source is available under the PolyForm Noncommercial License.
+**In short:** SnowRead is a local-first TXT and text-based EPUB reader for Android, developed and maintained by an individual. No ads, no analytics, no account — books, notes and reading progress stay on the device. It offers paginated and scrolling reading, offline text-to-speech, highlights and notes with Markdown export, full-library backup, and LAN book transfer. The source is available under the PolyForm Noncommercial License.

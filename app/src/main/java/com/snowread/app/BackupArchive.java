@@ -25,7 +25,7 @@ final class BackupArchive {
         if(store.books.size()>MAX_BOOKS)throw new IOException("每份备份最多支持 5000 本书");
         byte[] index=store.metadata().toString().getBytes(StandardCharsets.UTF_8);
         if(index.length>MAX_INDEX)throw new IOException("书库记录过大，无法生成这份备份");
-        JSONObject manifest=new JSONObject().put("format","snowread.backup").put("version",2).put("createdAt",System.currentTimeMillis()).put("bookCount",store.books.size());
+        JSONObject manifest=new JSONObject().put("format","snowread.backup").put("version",hasEpub(store)?3:2).put("createdAt",System.currentTimeMillis()).put("bookCount",store.books.size());
         long total=index.length+(settings==null?0:settings.length);long planned=index.length;for(LibraryStore.Book b:store.books){planned+=store.file(b).length();if(store.cover(b).isFile())planned+=store.cover(b).length();}if(planned>MAX_TOTAL)throw new IOException("备份解压后最多支持 1 GB");final int expected=(int)Math.max(1,planned);
         try(ZipOutputStream zip=new ZipOutputStream(new BufferedOutputStream(output))) {
             zip.setLevel(1);put(zip,"manifest.json",manifest.toString().getBytes(StandardCharsets.UTF_8));put(zip,"library/index.json",index);
@@ -62,7 +62,7 @@ final class BackupArchive {
             }
             if(!names.contains("manifest.json")||!names.contains("library/index.json"))throw new IOException("未找到完整备份，请选择应用导出的 ZIP 文件");
             JSONObject manifest=new JSONObject(read(new File(home,"manifest.json"),16384));
-            if(!"snowread.backup".equals(manifest.getString("format"))||(manifest.getInt("version")!=1&&manifest.getInt("version")!=2))throw new IOException("不支持这个备份版本，请更新应用后再试");
+            if(!"snowread.backup".equals(manifest.getString("format"))||(manifest.getInt("version")!=1&&manifest.getInt("version")!=2&&manifest.getInt("version")!=3))throw new IOException("不支持这个备份版本，请更新应用后再试");
             JSONObject metadata=new JSONObject(read(new File(home,"library/index.json"),MAX_INDEX));
             validateMetadata(metadata);
             LibraryStore incoming=new LibraryStore(home);
@@ -130,6 +130,7 @@ final class BackupArchive {
             clean(previous);return restored;
         }finally{clean(home);}
     }
+    private static boolean hasEpub(LibraryStore store){for(LibraryStore.Book b:store.books)if(b.epub())return true;return false;}
     private static void validateMetadata(JSONObject root)throws Exception {
         int version=root.getInt("version");if(version!=2&&version!=3)throw new IOException("备份中的书库版本不受支持");
         JSONArray categories=root.getJSONArray("categories"),books=root.getJSONArray("books");

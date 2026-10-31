@@ -20,7 +20,8 @@ final class LibraryStore {
         volatile ReadingAnchor anchor;
         final LinkedHashMap<Integer,ReadingAnchor> markAnchors=new LinkedHashMap<>();
         final ArrayList<ReadingAnchor.Unmapped> unmappedMarks=new ArrayList<>();
-        String sourceName="",encodingConfidence="";
+        String sourceName="",encodingConfidence="",format="txt";
+        boolean epub(){return "epub".equals(format);}
         int chapterRule,scriptMode;
         Book(String id, String title, String encoding, int length) {
             this.id=id; this.title=title; this.encoding=encoding; this.length=length;
@@ -88,16 +89,22 @@ final class LibraryStore {
         byte[] hash=digest.digest(bytes); StringBuilder id=new StringBuilder();
         for (byte b:hash) id.append(String.format(Locale.US,"%02x",b&255));
         Book existing=byId.get(id.toString());if(existing!=null)return existing;
-        TextDocument doc=prepared==null?TextDocument.decode(bytes,forced):prepared;
-        Book book=new Book(id.toString(),display==null?TitleCleaner.clean(title):display,doc.encoding,doc.text.length());book.sourceName=title.toLowerCase(Locale.ROOT).endsWith(".txt")?title:title+".txt";book.encodingConfidence=doc.encodingConfidence;
+        EpubDocument epub=EpubDocument.name(title)?EpubDocument.parse(bytes):null;
+        TextDocument doc=epub!=null?epub.document:prepared==null?TextDocument.decode(bytes,forced):prepared;
+        Book book=new Book(id.toString(),display==null?(epub!=null&&!epub.title.equals("未命名章节")?epub.title:TitleCleaner.clean(title)):display,doc.encoding,doc.text.length());book.format=epub==null?"txt":"epub";book.sourceName=EpubDocument.supported(title)?title:title+".txt";book.encodingConfidence=doc.encodingConfidence;
         if(organization.categories.containsKey(category))book.categoryIds.add(category);
         AtomicFile raw=new AtomicFile(file(book)); FileOutputStream out=raw.startWrite();
         try { out.write(bytes); raw.finishWrite(out); } catch (Exception e) { raw.failWrite(out); throw e; }
+        if(epub!=null&&epub.cover!=null){
+            AtomicFile art=new AtomicFile(cover(book));FileOutputStream image=null;
+            try{File parent=cover(book).getParentFile();if(!parent.isDirectory()&&!parent.mkdirs())throw new IOException("无法创建封面目录");image=art.startWrite();image.write(epub.cover);art.finishWrite(image);}
+            catch(Exception e){if(image!=null)art.failWrite(image);raw.delete();art.delete();throw e;}
+        }
         byId.put(book.id,book);
         if(batchDepth>0){books.add(book);batchAdded.add(book);batchDirty=true;}
         else {
             books.add(0,book);
-            try {save();}catch(Exception e){books.remove(book);byId.remove(book.id);raw.delete();throw e;}
+            try {save();}catch(Exception e){books.remove(book);byId.remove(book.id);raw.delete();new AtomicFile(cover(book)).delete();throw e;}
         }
         return book;
     }
@@ -121,11 +128,12 @@ final class LibraryStore {
     synchronized void abortBatch() {if(batchBefore!=null)rollbackBatch();clearBatch();}
     private void rollbackBatch() {
         books.clear();books.addAll(batchBefore);byId.clear();for(Book book:books)byId.put(book.id,book);
-        for(Book book:batchAdded)new AtomicFile(file(book)).delete();
+        for(Book book:batchAdded){new AtomicFile(file(book)).delete();new AtomicFile(cover(book)).delete();}
     }
     private void clearBatch(){batchDepth=0;batchDirty=false;batchBefore=null;batchAdded.clear();}
     private void requireNoBatch(){if(batchDepth>0)throw new IllegalStateException("请等待批量导入结束后再修改书架");}
     TextDocument load(Book book) throws Exception {
+        if(book.epub())return EpubDocument.parse(TextDocument.readLimited(new FileInputStream(file(book)))).document;
         TextDocument doc=TextDocument.decode(TextDocument.readLimited(new FileInputStream(file(book))),book.encoding);
         if(book.chapterRule!=ChapterRule.AUTO){
             TextDocument ruled=new TextDocument(doc.text,doc.encoding,book.chapterRule);
@@ -167,8 +175,9 @@ final class LibraryStore {
             if(replacement!=null){if(!replacement.valid(book.length)||book.annotations.size()>=BookNote.MAX_COUNT)throw new IOException("笔记无效或超过每本5000条限制");book.annotations.add(replacement);}save();
         }catch(Exception e){book.annotations.clear();book.annotations.addAll(before);throw e;}
     }
-    synchronized void reencode(Book b,TextDocument doc,PositionMigration plan)throws Exception{requireNoBatch();Book before=snapshot(b);migration(b,doc,plan);try{save();}catch(Exception e){b.encoding=before.encoding;b.length=before.length;b.offset=before.offset;b.marks.clear();b.marks.addAll(before.marks);b.markNotes.clear();b.markNotes.putAll(before.markNotes);b.markAnchors.clear();b.unmappedMarks.clear();BookExtras.copy(before,b);throw e;}}
+    synchronized void reencode(Book b,TextDocument doc,PositionMigration plan)throws Exception{if(b.epub())throw new IOException("EPUB 不支持切换 TXT 编码");requireNoBatch();Book before=snapshot(b);migration(b,doc,plan);try{save();}catch(Exception e){b.encoding=before.encoding;b.length=before.length;b.offset=before.offset;b.marks.clear();b.marks.addAll(before.marks);b.markNotes.clear();b.markNotes.putAll(before.markNotes);b.markAnchors.clear();b.unmappedMarks.clear();BookExtras.copy(before,b);throw e;}}
     synchronized Book replaceContent(Book old,byte[] bytes,String source,TextDocument doc,PositionMigration plan)throws Exception{
+        if(old.epub())throw new IOException("EPUB 暂不支持替换 TXT 正文");
         requireNoBatch();if(find(old.id)!=old)throw new IOException("这本书已不在书架中");byte[] digest=MessageDigest.getInstance("SHA-256").digest(bytes);StringBuilder hex=new StringBuilder();for(byte n:digest)hex.append(String.format(Locale.US,"%02x",n&255));String id=hex.toString();
         if(id.equals(old.id)){reencode(old,doc,plan);return old;}if(find(id)!=null)throw new IOException("所选正文已在书架中，为保留两本记录，本次未替换");
         Book next=snapshot(old);next.id=id;next.sourceName=source;migration(next,doc,plan);int at=books.indexOf(old);boolean switched=false;AtomicFile raw=new AtomicFile(file(next));

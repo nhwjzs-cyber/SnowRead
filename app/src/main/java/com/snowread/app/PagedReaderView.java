@@ -24,7 +24,6 @@ public final class PagedReaderView extends View {
     private ValueAnimator dustAnimator;private float dustFraction=1;private int dustDirection;
     private final TextPaint paint=new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final Paint edgeShadow=new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint edgeLight=new Paint(Paint.ANTI_ALIAS_FLAG);
     private LinearGradient shadowLeft,shadowRight;private float shadowDepth=-1;
     private final float lineSpacing;
     private final ReaderTypography typography;
@@ -313,7 +312,7 @@ public final class PagedReaderView extends View {
     /** Start or continue a horizontal drag. The page follows the finger 1:1, with damping at the ends. */
     private void beginDrag(float distanceX){
         if(layout==null||indexing||disposed)return;
-        float width=contentWidth();
+        float width=getWidth();
         if(width<=0)return;
         if(!dragging){
             cancelAnimation();cancelEffects();
@@ -351,7 +350,7 @@ public final class PagedReaderView extends View {
      */
     private void settleDrag(){
         if(!dragging)return;
-        float width=contentWidth();
+        float width=getWidth();
         if(width<=0){dragging=false;dragRaw=0;dragOffset=0;return;}
         float travelled=Math.abs(dragOffset);
         float velocity=releaseVelocity(),speed=Math.abs(velocity);
@@ -446,12 +445,12 @@ public final class PagedReaderView extends View {
         });
     }
     private void drawPage(Canvas canvas,StaticLayout page,float x){
-        canvas.save();canvas.translate(x,0);canvas.clipRect(0,0,contentWidth(),contentHeight());
-        canvas.drawColor(pageBackground);page.draw(canvas);canvas.restore();
+        canvas.save();canvas.translate(x,0);canvas.clipRect(0,0,getWidth(),getHeight());
+        canvas.drawColor(pageBackground);canvas.translate(getPaddingLeft(),getPaddingTop());page.draw(canvas);canvas.restore();
     }
     /** A soft shadow along the seam between two pages reads better than a hard 1px line. */
     private void drawBoundary(Canvas canvas,float x,int direction){
-        float width=contentWidth(),height=contentHeight();
+        float width=getWidth(),height=getHeight();
         float depth=Math.min(16f*density,Math.max(6f*density,width*0.05f));
         if(depth<=0||x<=0||x>=width)return;
         if(depth!=shadowDepth){
@@ -462,18 +461,16 @@ public final class PagedReaderView extends View {
         edgeShadow.setShader(direction<0?shadowLeft:shadowRight);
         canvas.save();canvas.translate(x,0);
         canvas.drawRect(direction<0?-depth:0,0,direction<0?0:depth,height,edgeShadow);
-        edgeLight.setColor(Color.argb(20,255,255,255));edgeLight.setStrokeWidth(Math.max(1,density*.5f));
-        canvas.drawLine(0,0,0,height,edgeLight);canvas.restore();edgeShadow.setShader(null);
+        canvas.restore();edgeShadow.setShader(null);
     }
     @Override protected void onDraw(Canvas canvas){
         super.onDraw(canvas);
         if(layout!=null){
-            canvas.save();canvas.clipRect(getPaddingLeft(),getPaddingTop(),getWidth()-getPaddingRight(),getHeight()-getPaddingBottom());
-            canvas.translate(getPaddingLeft(),getPaddingTop());
-            float width=contentWidth();
+            canvas.save();canvas.clipRect(0,0,getWidth(),getHeight());
+            float width=getWidth();
             if(outgoingLayout!=null){
                 // A committed turn: the old page leaves while the new one slides in.
-                if(curlMode&&motionEnabled)curl.draw(canvas,outgoingLayout,layout,width,contentHeight(),slideFraction,slideDirection,pageBackground);
+                if(curlMode&&motionEnabled)curl.draw(canvas,outgoingLayout,layout,width,getHeight(),slideFraction,slideDirection,pageBackground,getPaddingLeft(),getPaddingTop());
                 else {
                 float oldX=-slideDirection*width*slideFraction,newX=slideDirection*width*(1-slideFraction);
                 drawPage(canvas,outgoingLayout,oldX);drawPage(canvas,layout,newX);
@@ -482,7 +479,7 @@ public final class PagedReaderView extends View {
                 }
             }else if((dragging||pendingTurn>0f)&&dragOffset!=0){
                 // The neighbour waits on the far side while the current page follows the finger.
-                if(curlMode&&motionEnabled){curl.draw(canvas,layout,dragNeighbour!=null?dragNeighbour:layout,width,contentHeight(),Math.min(1,Math.abs(dragOffset)/width),dragOffset<0?1:-1,pageBackground);}
+                if(curlMode&&motionEnabled){curl.draw(canvas,layout,dragNeighbour!=null?dragNeighbour:layout,width,getHeight(),Math.min(1,Math.abs(dragOffset)/width),dragOffset<0?1:-1,pageBackground,getPaddingLeft(),getPaddingTop());}
                 else {
                 if(dragNeighbour!=null){
                     float neighbourX=dragOffset<0?width+dragOffset:dragOffset-width;

@@ -80,6 +80,7 @@ public final class MainActivity extends Activity {
     private PagedReaderView pagedReader;
     private boolean pagedMode=false,pageMotion=true;
     private String readerText="";
+    private boolean statsPage;private String statsReturnBook="",statsSelectedDay="";
     private TextView chapterLabel, progressLabel,readerHeader;
     private ReaderFooter readerFooter;
     private SeekBar progress;
@@ -120,6 +121,7 @@ public final class MainActivity extends Activity {
         if(state!=null){shelfSearchOpen=state.getBoolean("shelfSearchOpen");shelfCategory=state.getString("shelfCategory",ShelfOrganization.ALL);selecting=state.getBoolean("selecting");ArrayList<String> ids=state.getStringArrayList("selectedBooks");if(ids!=null)selectedBooks.addAll(ids);}
         showLibrary(state==null?"":state.getString("shelfQuery",""));
         receiveExternal(getIntent());
+        if(state!=null&&externalFile==null&&state.getBoolean("statsPage",false)){statsPage=true;statsReturnBook=state.getString("statsReturnBook","");statsSelectedDay=state.getString("statsSelectedDay",ReadingStatsData.day(System.currentTimeMillis()));showReadingStats();return;}
         if (state!=null&&externalFile==null) {
             pendingReplaceId=state.getString("pendingReplaceId");pendingEncoding=state.getString("pendingEncoding");pendingCoverId=state.getString("pendingCoverId");pendingExportBookId=state.getString("pendingExportBookId");
             String id=state.getString("book");
@@ -152,6 +154,7 @@ public final class MainActivity extends Activity {
         final LinearLayout surface=root;EdgeToEdge.listen(surface,reading,(left,top,right,navigation,keyboard)->surface.setPadding(left,top,right,Math.max(navigation,keyboard)));
     }
     private void showLibrary(String query) {
+        statsPage=false;statsReturnBook="";
         if(shelfDrag!=null){shelfDrag.dispose();shelfDrag=null;}
         boolean listMode=!selecting&&prefs!=null&&prefs.getBoolean("shelfList",false);
         if(readerFooter!=null)readerFooter.resumed(false);readerFooter=null;readerHeader=null;
@@ -216,7 +219,7 @@ public final class MainActivity extends Activity {
             shelfAdapter.visible=ShelfOrganization.filterProgress(shelfAdapter.visible,Math.max(0,Math.min(2,prefs.getInt("shelfShow",0))),b->(float)ratio((LibraryStore.Book)b));
             shelfAdapter.visible=ShelfOrganization.arrange(shelfAdapter.visible,Math.max(0,Math.min(3,prefs.getInt("shelfSort",0))));
             if(resume!=null){View wrap=(View)resume.getParent();boolean show=!shelfSearchOpen&&shelfQuery.isEmpty();wrap.setVisibility(show?View.VISIBLE:View.GONE);int top=show?Math.max(wrap.getHeight(),wrap.getMeasuredHeight())+dp(4):dp(4);if(shelf.getPaddingTop()!=top){shelf.setPadding(dp(20),top,dp(20),dp(18));shelf.setSelection(0);}}
-            boolean first=store.books.isEmpty();emptyTitle.setText(first?"书架，等一本好书":"这里还没有书");emptyHint.setText(first?"导入手机里的 TXT 小说\n下次打开，接着上次的故事读":!shelfQuery.trim().isEmpty()?"试试更短的书名，或切换分类查找":"可切换分类，或从顶部 ＋ 导入书籍");firstImport.setVisibility(first?View.VISIBLE:View.GONE);sample.setVisibility(first?View.VISIBLE:View.GONE);refreshSelection();
+            boolean first=store.books.isEmpty();emptyTitle.setText(first?"书架，等一本好书":"这里还没有书");emptyHint.setText(first?"导入手机里的 TXT / EPUB 书籍\n下次打开，接着上次的故事读":!shelfQuery.trim().isEmpty()?"试试更短的书名，或切换分类查找":"可切换分类，或从顶部 ＋ 导入书籍");firstImport.setVisibility(first?View.VISIBLE:View.GONE);sample.setVisibility(first?View.VISIBLE:View.GONE);refreshSelection();
         };
         filter.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int f){}public void afterTextChanged(Editable e){}public void onTextChanged(CharSequence s,int a,int b,int c){render.run();}});filter.setText(query);render.run();
         LinearLayout footer=column();footer.setPadding(dp(20),0,dp(20),0);if(listenUi!=null)footer.addView(listenUi.miniBar());
@@ -227,7 +230,7 @@ public final class MainActivity extends Activity {
     private void toggleShelfSearch(){if(busy)return;if(shelfSearchOpen){closeShelfSearch();return;}shelfSearchOpen=true;if(shelfSearch==null)return;View row=(View)shelfSearch.getParent();row.setVisibility(View.VISIBLE);Motion.enter(row,Motion.CONTENT_NUDGE);View resume=root.findViewWithTag("shelf-resume-wrap");if(resume!=null){resume.setVisibility(View.GONE);GridView grid=(GridView)root.findViewWithTag("shelf-grid");grid.smoothScrollBy(0,0);grid.setPadding(dp(20),dp(4),dp(20),dp(18));grid.setSelection(0);}shelfSearch.requestFocus();shelfSearch.post(()->((android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(shelfSearch,android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT));}
     private void closeShelfSearch(){shelfSearchOpen=false;hideShelfKeyboard();if(shelfSearch!=null){shelfSearch.clearFocus();View row=(View)shelfSearch.getParent();Motion.exit(row,-Motion.CONTENT_NUDGE,Motion.FAST,()->{if(!shelfSearchOpen&&active==null&&!isDestroyed())showLibrary("");});}}
     private void hideShelfKeyboard(){if(root!=null)((android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(root.getWindowToken(),0);}
-    private void shelfMenu(){if(busy)return;dialog().setSnowflakes(true).setTitle("书架 · "+store.books.size()+" 本").setItems(new String[]{"多选书籍","分类管理","排序与筛选","数据与备份","氛围预览","外观模式","阅读时长"},(d,w)->{if(w==0){selecting=true;selectedBooks.clear();showLibrary(shelfQuery);}else if(w==1)manageCategories();else if(w==2)shelfArrange();else if(w==3)dataOptions();else if(w==4)atmospherePreview();else if(w==5)appearanceSettings();else showReadingStats();}).setItemHints(new String[]{"批量置顶、分类或移出所选书籍","新建、重命名或删除分类","按最近阅读或书名排序，只看在读或未读","导出、恢复、批量导入与回收站","手选天气与本地时间光线","浅色 / 深色 / 跟随系统","今日与本周时长，仅保存在本机"}).show();}
+    private void shelfMenu(){if(busy)return;dialog().setSnowflakes(true).setTitle("书架 · "+store.books.size()+" 本").setItems(new String[]{"多选书籍","分类管理","排序与筛选","数据与备份","氛围预览","外观模式","阅读统计"},(d,w)->{if(w==0){selecting=true;selectedBooks.clear();showLibrary(shelfQuery);}else if(w==1)manageCategories();else if(w==2)shelfArrange();else if(w==3)dataOptions();else if(w==4)atmospherePreview();else if(w==5)appearanceSettings();else showReadingStats();}).setItemHints(new String[]{"批量置顶、分类或移出所选书籍","新建、重命名或删除分类","按最近阅读或书名排序，只看在读或未读","导出、恢复、批量导入与回收站","手选天气与本地时间光线","浅色 / 深色 / 跟随系统","阅读日历、每日明细与按书时长"}).show();}
     private void shelfArrange(){
         LinearLayout panel=column();
         panel.addView(sectionLabel("排序方式"));
@@ -257,13 +260,36 @@ public final class MainActivity extends Activity {
     private void statsPulse(){
         if(readingStats==null)readingStats=new ReadingStats(this);
         boolean listening=listenOwns()&&listenUi!=null&&listenUi.snapshot()!=null&&(listenUi.snapshot().playing()||listenUi.snapshot().state==SpeechQueue.State.PREPARING);
-        readingStats.pulse(statsResumed&&hasWindowFocus()&&active!=null&&document!=null&&!busy&&!listening,lastReadingInteraction);
+        readingStats.pulse(statsResumed&&hasWindowFocus()&&active!=null&&document!=null&&!busy&&!listening&&!statsPage,lastReadingInteraction,active==null?"":active.id);
     }
     @Override public void onUserInteraction(){super.onUserInteraction();statsPulse();lastReadingInteraction=SystemClock.elapsedRealtime();statsPulse();}
     private void showReadingStats(){
-        statsPulse();ToggleRow enabled=new ToggleRow(uiContext(),"记录本地阅读时长",readingStats.enabled(),uiDark());enabled.onChanged(()->readingStats.enabled(enabled.checked()));
-        dialog().setTitle("阅读时长").setMessage("今日 · "+ReadingStats.duration(readingStats.today())+"\n本周 · "+ReadingStats.duration(readingStats.week())+"\n\n只计前台阅读，后台、听书播放及90秒无操作后的停留不累计。每15秒保存，时长为近似值；仅在本机，不随书库备份。").setView(enabled).setNeutralButton("清空时长记录",(d,w)->dialog().setTitle("清空阅读时长？").setMessage("书籍、进度和书签不受影响。").setPositiveButton("清空",(a,b)->{readingStats.clear();showReadingStats();}).show()).show();
+        if(busy)return;
+        if(!statsPage){savePosition();statsPulse();statsReturnBook=active==null?"":active.id;readingStats.pulse(false,lastReadingInteraction);statsSelectedDay=ReadingStatsData.day(System.currentTimeMillis());}
+        statsPage=true;if(readerFooter!=null)readerFooter.resumed(false);readerFooter=null;chrome.leave();chromeHandler.removeCallbacks(chromeTimeout);
+        active=null;document=null;readerText="";reader=null;pagedReader=null;readerAdapter=null;applyTypeset();palette=effectivePalette();appearanceDark=uiDark();frame(false);
+        LinearLayout top=row();top.setPadding(dp(12),dp(8),dp(12),dp(8));top.addView(button("返回",()->leaveStats()));TextView title=text("阅读统计",21,ink);title.setGravity(Gravity.CENTER);top.addView(title,new LinearLayout.LayoutParams(0,-2,1));top.addView(button("今天",()->{statsSelectedDay=ReadingStatsData.day(System.currentTimeMillis());showReadingStats();}));root.addView(top);
+        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));LinearLayout panel=column();panel.setPadding(dp(20),dp(10),dp(20),dp(28));scroll.addView(panel);
+        panel.addView(text("雪渐融，故事留下足迹。",13,muted));
+        LinearLayout totals=row();totals.setPadding(0,dp(18),0,dp(18));String[] labels={"今日","本周","累计"};long[] values={readingStats.today(),readingStats.week(),readingStats.total()};for(int i=0;i<3;i++){LinearLayout tile=column();tile.setPadding(dp(8),dp(10),dp(8),dp(10));tile.addView(text(labels[i],12,muted));tile.addView(text(ReadingStats.duration(values[i]),15,ink));totals.addView(tile,new LinearLayout.LayoutParams(0,-2,1));}panel.addView(totals);
+        panel.addView(sectionLabel("阅读日历 · 近16周"));
+        final LinearLayout detail=column();final Button date=button(statsSelectedDay+"  ▾",()->{});final ReadingHeatmap[] calendar={null};
+        java.util.List<String> days=ReadingStatsData.days(16,System.currentTimeMillis());
+        ReadingHeatmap.Selected choose=value->{statsSelectedDay=value;date.setText(value+"  ▾");calendar[0].select(value);showStatsDay(detail,value);};
+        calendar[0]=new ReadingHeatmap(uiContext(),readingStats,days,statsSelectedDay,uiDark(),choose::select);calendar[0].setTag("reading-stats-heatmap");panel.addView(calendar[0],new LinearLayout.LayoutParams(-1,dp(196)));
+        date.setTag("reading-stats-date");date.setOnClickListener(v->{ArrayList<String> options=new ArrayList<>();String today=ReadingStatsData.day(System.currentTimeMillis());for(int i=days.size()-1;i>=0;i--)if(days.get(i).compareTo(today)<=0)options.add(days.get(i));dialog().setTitle("选择统计日期").setItems(options.toArray(new String[0]),(d,w)->choose.select(options.get(w))).show();});panel.addView(date);panel.addView(detail);showStatsDay(detail,statsSelectedDay);
+        ToggleRow enabled=new ToggleRow(uiContext(),"记录本地阅读时长",readingStats.enabled(),uiDark());enabled.setTag("reading-stats-enabled");enabled.onChanged(()->readingStats.enabled(enabled.checked()));panel.addView(enabled);
+        panel.addView(text("仅记录前台正文阅读。后台、听书和90秒无操作后的停留不累计；每15秒采样，时长为近似值。按书明细从新版开始记录，旧每日总时长保留。仅存本机，不随书库备份。",12,muted));
+        panel.addView(button("清空统计记录",()->dialog().setTitle("清空阅读统计？").setMessage("仅清除本机统计，书籍、进度、笔记和书签不受影响。").setPositiveButton("清空",(d,w)->{readingStats.clear();showReadingStats();}).setNegativeButton("取消",null).show()));applyReaderWindow();
     }
+    private void showStatsDay(LinearLayout panel,String day){
+        panel.removeAllViews();panel.addView(sectionLabel(day+" · 阅读明细"));panel.addView(text(ReadingStats.duration(readingStats.day(day)),24,ink));
+        long first=readingStats.first(day),last=readingStats.last(day);if(first>0&&last>=first){java.text.DateFormat time=android.text.format.DateFormat.getTimeFormat(this);panel.addView(text("首次 "+time.format(new Date(first))+" · 最近 "+time.format(new Date(last)),12,muted));}
+        ArrayList<Map.Entry<String,Long>> books=new ArrayList<>(readingStats.books(day).entrySet());Collections.sort(books,(a,b)->Long.compare(b.getValue(),a.getValue()));long known=0;
+        for(Map.Entry<String,Long> record:books){LibraryStore.Book book=store.find(record.getKey());LinearLayout line=row();line.setPadding(0,dp(12),0,dp(12));TextView name=text(book==null?"已移出书架的书籍":book.title,14,ink);name.setMaxLines(2);name.setEllipsize(TextUtils.TruncateAt.END);line.addView(name,new LinearLayout.LayoutParams(0,-2,1));line.addView(text(ReadingStats.duration(record.getValue()),13,muted));panel.addView(line);known+=record.getValue();}
+        long unknown=Math.max(0,readingStats.day(day)-known);if(unknown>0)panel.addView(text("未按书归属的历史时长 · "+ReadingStats.duration(unknown),12,muted));if(readingStats.day(day)==0)panel.addView(text("这一天还没有阅读记录。",14,muted));
+    }
+    private void leaveStats(){String id=statsReturnBook;statsPage=false;statsReturnBook="";LibraryStore.Book book=store.find(id);if(book!=null)openBook(book);else showLibrary(shelfQuery);}
     private void appearanceSettings(){
         final AppSheet[] appearanceSheet={null};
         LinearLayout panel=column();
@@ -556,7 +582,7 @@ public final class MainActivity extends Activity {
     private void writeSelectedZip(Uri uri){
         if(busy||zipSelection==null||zipSelection.isEmpty())return;busy=true;
         final ArrayList<LibraryStore.Book> books=new ArrayList<>(zipSelection);zipSelection=null;
-        TaskControl task=showCancellableTask("导出书籍","正在打包所选的 "+books.size()+" 本 TXT…");
+        TaskControl task=showCancellableTask("导出书籍","正在打包所选的 "+books.size()+" 本书籍…");
         io.execute(()->{
             int exported=0,skipped=0;
             try(OutputStream out=getContentResolver().openOutputStream(uri,"wt");java.util.zip.ZipOutputStream zip=new java.util.zip.ZipOutputStream(new BufferedOutputStream(out))){
@@ -570,14 +596,14 @@ public final class MainActivity extends Activity {
                     if(!file.isFile()){skipped++;continue;}
                     String base=book.title.replaceAll("[\\\\/:*?\"<>|\\r\\n]","_").trim();
                     if(base.isEmpty())base="未命名";
-                    String name=base+".txt";int n=2;while(!used.add(name))name=base+" ("+(n++)+").txt";
+                    String ext=book.epub()?".epub":".txt";String name=base+ext;int n=2;while(!used.add(name))name=base+" ("+(n++)+")"+ext;
                     zip.putNextEntry(new java.util.zip.ZipEntry(name));
                     try(InputStream in=new FileInputStream(file)){byte[] buffer=new byte[8192];int read;while((read=in.read(buffer))!=-1)zip.write(buffer,0,read);}
                     zip.closeEntry();exported++;
                 }
                 task.beginCommit();
                 final int done=exported,missed=skipped;
-                runOnUiThread(()->{hideLoading();busy=false;if(isDestroyed())return;successSheet("导出完成","已导出 "+done+" 本书为 TXT"+(missed>0?"，跳过 "+missed+" 本（文件缺失）":"")+"。\nZIP 内为原始文本，不包含封面与进度。");});
+                runOnUiThread(()->{hideLoading();busy=false;if(isDestroyed())return;successSheet("导出完成","已导出 "+done+" 本原始书籍"+(missed>0?"，跳过 "+missed+" 本（文件缺失）":"")+"。\nZIP 内保留 TXT / EPUB 原始文件，不包含应用内封面与进度。");});
             }catch(Exception e){runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())taskFailure("导出未完成，请重试",e,uri);});}
         });
     }
@@ -588,12 +614,12 @@ public final class MainActivity extends Activity {
     }
     private void chooseFolder(){if(busy)return;Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);intent.putExtra(Intent.EXTRA_LOCAL_ONLY,true);launchPicker(intent,PICK_FOLDER);}
     private void importFolder(Uri tree){
-        if(busy)return;busy=true;TaskControl task=showCancellableTask("扫描 TXT 文件夹","仅扫描所选文件夹中的 TXT，不包含子文件夹…");
+        if(busy)return;busy=true;TaskControl task=showCancellableTask("扫描书籍文件夹","扫描所选文件夹中的 TXT / EPUB，不包含子文件夹…");
         io.execute(()->{try{
             String parent=android.provider.DocumentsContract.getTreeDocumentId(tree);Uri children=android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(tree,parent);ArrayList<Uri> uris=new ArrayList<>();
             try(Cursor c=getContentResolver().query(children,new String[]{android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE},null,null,null)){
-                if(c==null)throw new IOException("无法读取这个文件夹");int scanned=0;while(c.moveToNext()){task.checkCancelled();if(++scanned%32==0)task.update(scanned,0,"已扫描 "+scanned+" 项，找到 "+uris.size()+" 个 TXT");String name=c.getString(1);if(name!=null&&!android.provider.DocumentsContract.Document.MIME_TYPE_DIR.equals(c.getString(2))&&name.toLowerCase(Locale.ROOT).endsWith(".txt")){uris.add(android.provider.DocumentsContract.buildDocumentUriUsingTree(tree,c.getString(0)));if(uris.size()>500)throw new IOException("此文件夹超过 500 个 TXT，请分为较小的文件夹后导入");}}
-            }task.beginCommit();runOnUiThread(()->{hideLoading();busy=false;if(isDestroyed())return;if(uris.isEmpty())toast("所选文件夹中没有 TXT 文件");else if(uris.size()==1)importSingle(uris.get(0),null);else chooseImportCategory(uris,null);});
+                if(c==null)throw new IOException("无法读取这个文件夹");int scanned=0;while(c.moveToNext()){task.checkCancelled();if(++scanned%32==0)task.update(scanned,0,"已扫描 "+scanned+" 项，找到 "+uris.size()+" 个书籍文件");String name=c.getString(1);if(name!=null&&!android.provider.DocumentsContract.Document.MIME_TYPE_DIR.equals(c.getString(2))&&EpubDocument.supported(name)){uris.add(android.provider.DocumentsContract.buildDocumentUriUsingTree(tree,c.getString(0)));if(uris.size()>500)throw new IOException("此文件夹超过 500 个书籍文件，请分为较小的文件夹后导入");}}
+            }task.beginCommit();runOnUiThread(()->{hideLoading();busy=false;if(isDestroyed())return;if(uris.isEmpty())toast("所选文件夹中没有 TXT / EPUB 文件");else if(uris.size()==1)importSingle(uris.get(0),null);else chooseImportCategory(uris,null);});
         }catch(Exception e){runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())taskFailure("文件夹扫描失败",e,null);});}});
     }
     private void startBatchImport(ArrayList<Uri> uris,String category,String encoding) {
@@ -623,8 +649,8 @@ public final class MainActivity extends Activity {
         backup.body.addView(button("从备份恢复 / 合并",first(handle,()->{Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType("*/*");launchPicker(intent,PICK_BACKUP);})));
         SettingsSection importing=new SettingsSection(uiContext(),"data-import","批量导入","文件选择器 · 整个文件夹",uiDark());
         importing.body.addView(button("Wi-Fi 局域网传书",first(handle,()->lanTransfer())));
-        importing.body.addView(button("批量导入 TXT",first(handle,()->chooseFile(null))));
-        importing.body.addView(button("从文件夹批量导入 TXT",first(handle,()->chooseFolder())));
+        importing.body.addView(button("批量导入 TXT / EPUB",first(handle,()->chooseFile(null))));
+        importing.body.addView(button("从文件夹导入 TXT / EPUB",first(handle,()->chooseFolder())));
         SettingsSection[] sections={backup,importing};
         for(SettingsSection section:sections){
             LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.topMargin=dp(10);panel.addView(section,p);
@@ -676,18 +702,18 @@ public final class MainActivity extends Activity {
         });
     }
     private void chooseTextExport(LibraryStore.Book book) {
-        pendingExportBookId=book.id;Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType("text/plain");
-        String filename=book.title.replaceAll("[\\\\/:*?\"<>|\\r\\n]","_");if(filename.length()>80)filename=filename.substring(0,80);intent.putExtra(Intent.EXTRA_TITLE,filename+".txt");launchPicker(intent,EXPORT_TXT);
+        pendingExportBookId=book.id;Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType(book.epub()?"application/epub+zip":"text/plain");
+        String filename=book.title.replaceAll("[\\\\/:*?\"<>|\\r\\n]","_");if(filename.length()>80)filename=filename.substring(0,80);intent.putExtra(Intent.EXTRA_TITLE,filename+(book.epub()?".epub":".txt"));launchPicker(intent,EXPORT_TXT);
     }
     private void exportText(Uri uri) {
         LibraryStore.Book chosen=null;for(LibraryStore.Book b:store.books)if(b.id.equals(pendingExportBookId))chosen=b;pendingExportBookId=null;if(chosen==null){toast("这本书已不在书架中");return;}
-        final LibraryStore.Book book=chosen;if(busy)return;busy=true;final TaskControl task=showCancellableTask("导出 TXT","正在导出「"+book.title+"」…");
-        io.execute(()->{try{try(InputStream in=new FileInputStream(store.file(book));OutputStream out=getContentResolver().openOutputStream(uri,"wt")){BackupArchive.copyTracked(in,out,TextDocument.MAX_BYTES,task,0,(int)store.file(book).length(),book.title);}task.beginCommit();runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())toast("TXT 已导出，保留原始文本编码");});}catch(Exception e){runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())taskFailure("TXT 导出失败",e,uri);});}});
+        final LibraryStore.Book book=chosen;if(busy)return;busy=true;final TaskControl task=showCancellableTask("导出原始书籍","正在导出「"+book.title+"」…");
+        io.execute(()->{try{try(InputStream in=new FileInputStream(store.file(book));OutputStream out=getContentResolver().openOutputStream(uri,"wt")){BackupArchive.copyTracked(in,out,TextDocument.MAX_BYTES,task,0,(int)store.file(book).length(),book.title);}task.beginCommit();runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())toast(book.epub()?"原始 EPUB 已导出":"TXT 已导出，保留原始文本编码");});}catch(Exception e){runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())taskFailure("书籍导出失败",e,uri);});}});
     }
     private interface BookTask { LibraryStore.Book run() throws Exception; }
     private void importSingle(Uri uri,String encoding){
-        if(busy)return;final String category=store.organization.categories.containsKey(shelfCategory)?shelfCategory:"";busy=true;showLoading("正在分析文本编码与书名…");
-        io.execute(()->{try{String filename=displayName(uri);if(!filename.toLowerCase(Locale.ROOT).endsWith(".txt"))throw new IOException("请选择 TXT 文件");byte[] bytes=TextDocument.readLimited(getContentResolver().openInputStream(uri));TextDocument decoded=TextDocument.decode(bytes,encoding);String title=TitleCleaner.clean(filename);runOnUiThread(()->{hideLoading();busy=false;if(isDestroyed())return;if(prefs.getBoolean("previewImport",false)||!"高".equals(decoded.encodingConfidence)||!title.equals(TitleCleaner.stem(filename)))importPreview(bytes,filename,title,category,decoded);else commitImport(bytes,filename,title,category,decoded);});}catch(Exception e){runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())dialog().setTitle("无法导入").setMessage(message(e)).setPositiveButton("指定编码重试",(d,w)->pickEncoding(value->importSingle(uri,value))).show();});}});
+        if(busy)return;final String category=store.organization.categories.containsKey(shelfCategory)?shelfCategory:"";busy=true;showLoading("正在分析书籍内容与书名…");final boolean[] epubAttempt={false};
+        io.execute(()->{try{String filename=displayName(uri);epubAttempt[0]=EpubDocument.name(filename);if(!EpubDocument.supported(filename))throw new IOException("请选择 TXT 或 EPUB 文件");byte[] bytes=TextDocument.readLimited(getContentResolver().openInputStream(uri));if(EpubDocument.name(filename)){LibraryStore.Book imported=store.add(bytes,filename,null,category);runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed()){freshBooks.add(imported.id);openBook(imported);}});return;}TextDocument decoded=TextDocument.decode(bytes,encoding);String title=TitleCleaner.clean(filename);runOnUiThread(()->{hideLoading();busy=false;if(isDestroyed())return;if(prefs.getBoolean("previewImport",false)||!"高".equals(decoded.encodingConfidence)||!title.equals(TitleCleaner.stem(filename)))importPreview(bytes,filename,title,category,decoded);else commitImport(bytes,filename,title,category,decoded);});}catch(Exception e){runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())dialog().setTitle("无法导入").setMessage(message(e)).setPositiveButton(epubAttempt[0]?"知道了":"指定编码重试",(d,w)->{if(!epubAttempt[0])pickEncoding(value->importSingle(uri,value));}).show();});}});
     }
     private void importing(BookTask task,Runnable retry) {
         if (busy) return;final HashSet<String> known=new HashSet<>();for(LibraryStore.Book b:store.books)known.add(b.id);busy=true;showLoading("正在整理书页…");
@@ -705,8 +731,8 @@ public final class MainActivity extends Activity {
         importing(()->store.add(TextDocument.readLimited(getAssets().open("sample.txt")),"山间来信 · 示例",null),null);
     }
     private void openBook(LibraryStore.Book book) {
-        if (busy) return;
-        savePosition();if(repository!=null&&!repository.listenOwner.isEmpty()&&!repository.owns(book.id)&&listenUi!=null)listenUi.stopPlayback(); active=null; reader=null; pagedReader=null;
+        if (busy) return;statsPage=false;
+        if(readingStats!=null)readingStats.pulse(false,lastReadingInteraction);savePosition();if(repository!=null&&!repository.listenOwner.isEmpty()&&!repository.owns(book.id)&&listenUi!=null)listenUi.stopPlayback(); active=null; reader=null; pagedReader=null;
         int token=++generation; busy=true;showLoading("正在翻开「"+book.title+"」…");
         io.execute(()-> {
             try {
@@ -918,7 +944,7 @@ public final class MainActivity extends Activity {
         final AppSheet[] self={null};
         Button sort=button(order.descending?"倒序 ↓":"正序 ↑",()->{});sort.setTextSize(12);sort.setContentDescription("切换目录正序或倒序");
         Button ruleEntry=button("目录识别",()->chapterRuleSheet(doc,active,self));ruleEntry.setTextSize(12);ruleEntry.setContentDescription("预览并选择分章规则");
-        LinearLayout headerRow=row();headerRow.addView(sort,new LinearLayout.LayoutParams(0,-2,1));headerRow.addView(ruleEntry,new LinearLayout.LayoutParams(0,-2,1));
+        LinearLayout headerRow=row();headerRow.addView(sort,new LinearLayout.LayoutParams(0,-2,1));if(!active.epub())headerRow.addView(ruleEntry,new LinearLayout.LayoutParams(0,-2,1));
         Runnable locate=()->{filter.setText("");int row=order.locate(anchor);adapter.notifyDataSetChanged();if(row>=0)list.smoothScrollToPositionFromTop(row,Math.max(0,list.getHeight()/3),Motion.enabled(this)?240:0);};
         sort.setOnClickListener(v->{order.descending=!order.descending;prefs.edit().putBoolean("tocDescending",order.descending).apply();sort.setText(order.descending?"倒序 ↓":"正序 ↑");order.rebuild();adapter.notifyDataSetChanged();});
         Button current=button("当前章",locate);current.setTextColor(isNight()?SnowTheme.NIGHT_BACKGROUND:Color.WHITE);current.setCompoundDrawablesRelative(iconDrawable("ic_locate",isNight()?SnowTheme.NIGHT_BACKGROUND:Color.WHITE,20),null,null,null);current.setCompoundDrawablePadding(dp(5));current.setPadding(dp(12),0,dp(12),0);current.setBackground(SnowTheme.ripple(accent,dp(24),0x30FFFFFF));current.setElevation(dp(4));current.setContentDescription("回到当前章");
@@ -930,6 +956,7 @@ public final class MainActivity extends Activity {
     }
     /** F01: preview chapter recognition with a selectable rule, then apply it without touching the text. */
     private void chapterRuleSheet(TextDocument doc,LibraryStore.Book book,AppSheet[] toc){
+        if(active!=null&&active.epub()){toast("EPUB 使用书内目录，不需要 TXT 分章规则");return;}
         if(busy||doc!=document)return;
         AppSheet.Builder builder=dialog().setSnowflakes(true).setTitle("目录识别设置");
         AppSheet[] handle=new AppSheet[1];
@@ -1227,7 +1254,7 @@ public final class MainActivity extends Activity {
             if(w==2) chapterJump();
             if(w==2+s&&searchBack){searchTerm=searchSessionTerm;search();return;}
             if(w==3+s) appearance();
-            if(w==4+s) pickEncoding(enc->changeEncoding(active,enc));if(w==5+s)listenUi.open();if(w==6+s){int previous=navigation.pop();if(previous>=0)jumpTo(previous);else toast("还没有跳转历史");}if(w==7+s)copySentence(position());if(w==8+s)notes();
+            if(w==4+s){if(active.epub())toast("EPUB 编码由书籍定义，无需切换");else pickEncoding(enc->changeEncoding(active,enc));}if(w==5+s)listenUi.open();if(w==6+s){int previous=navigation.pop();if(previous>=0)jumpTo(previous);else toast("还没有跳转历史");}if(w==7+s)copySentence(position());if(w==8+s)notes();
         }).setNegativeButton("关闭",null).show();
     }
     private String clockText(int minutes){return String.format(Locale.CHINA,"%02d:%02d",minutes/60,minutes%60);}
@@ -1236,7 +1263,7 @@ public final class MainActivity extends Activity {
         AppSheet sheet=dialog().setTitle(label).setView(panel).setPositiveButton("保存时间",null).show();sheet.getButton(AppSheet.BUTTON_POSITIVE).setOnClickListener(v->{String value=input.getText().toString().trim();if(!value.matches("(?:[01]?[0-9]|2[0-3]):[0-5][0-9]")){hint.setText("请输入 00:00 至 23:59 的时间");return;}String[] parts=value.split(":");times[index]=Integer.parseInt(parts[0])*60+Integer.parseInt(parts[1]);button.setText(label+" "+clockText(times[index]));sheet.dismiss();});
     }
     private int effectivePalette(){java.util.Calendar now=java.util.Calendar.getInstance();boolean night=(getResources().getConfiguration().uiMode&Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES;return ReaderPolicy.palette(manualPalette,previewNightMode==null?prefs.getInt("autoNight",0):previewNightMode,night,now.get(java.util.Calendar.HOUR_OF_DAY)*60+now.get(java.util.Calendar.MINUTE),prefs.getInt("nightStart",22*60),prefs.getInt("nightEnd",7*60));}
-    private void refreshAutoTheme(){if(prefs==null||failed||busy||!hasWindowFocus())return;int p=effectivePalette();boolean dark=uiDark();if(p==palette&&dark==appearanceDark)return;int offset=position();boolean readerChanged=p!=palette;palette=p;appearanceDark=dark;if(active!=null&&document!=null){capturePage();showReader(offset);revealPage();}else if(store!=null)showLibrary(shelfQuery);}
+    private void refreshAutoTheme(){if(prefs==null||failed||busy||!hasWindowFocus())return;int p=effectivePalette();boolean dark=uiDark();if(p==palette&&dark==appearanceDark)return;int offset=position();boolean readerChanged=p!=palette;palette=p;appearanceDark=dark;if(statsPage){showReadingStats();}else if(active!=null&&document!=null){capturePage();showReader(offset);revealPage();}else if(store!=null)showLibrary(shelfQuery);}
     private void applyReaderWindow(){
         if(prefs==null)return;WindowManager.LayoutParams a=getWindow().getAttributes();a.screenBrightness=active==null?-1:ReaderPolicy.brightness(prefs.getBoolean("followBrightness",true),prefs.getFloat("brightness",.5f));getWindow().setAttributes(a);
         int direction=active==null?0:prefs.getInt("orientation",0);int orientation=direction==1?android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT:direction==2?android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE:android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;if(getRequestedOrientation()!=orientation)setRequestedOrientation(orientation);
@@ -1252,7 +1279,7 @@ public final class MainActivity extends Activity {
     private void receiveExternal(Intent intent){
         if(intent==null)return;String action=intent.getAction();if(!Intent.ACTION_VIEW.equals(action)&&!Intent.ACTION_SEND.equals(action))return;
         Uri uri=Intent.ACTION_VIEW.equals(action)?intent.getData():intent.getParcelableExtra(Intent.EXTRA_STREAM);intent.setAction(null);
-        if(uri!=null&&("content".equals(uri.getScheme())||"file".equals(uri.getScheme())))externalFile=uri;else toast("请分享或打开一个 TXT 文件附件");
+        if(uri!=null&&("content".equals(uri.getScheme())||"file".equals(uri.getScheme())))externalFile=uri;else toast("请分享或打开 TXT / EPUB 文件附件");
     }
     private void consumeExternal(){if(externalFile==null||busy||failed||tearingDown)return;Uri uri=externalFile;externalFile=null;savePosition();importSingle(uri,null);}
     private TaskControl showCancellableTask(String title,String msg){
@@ -1282,7 +1309,7 @@ public final class MainActivity extends Activity {
     private void confirmDeleteSelected(){
         if(busy)return;ArrayList<LibraryStore.Book> books=selected();if(books.isEmpty())return;
         StringBuilder names=new StringBuilder();for(int i=0;i<Math.min(4,books.size());i++)names.append("《").append(books.get(i).title).append("》\n");if(books.size()>4)names.append("等 ").append(books.size()).append(" 本\n");
-        LinearLayout preview=column();TextView titles=text(names.toString().trim(),14,ink);titles.setLineSpacing(dp(4),1);preview.addView(titles);TextView hint=text("将从书架移入回收站，保留 7 天，可恢复正文、封面、进度和书签。手机里的原始 TXT 文件会保留。",13,muted);hint.setPadding(0,dp(12),0,0);preview.addView(hint);
+        LinearLayout preview=column();TextView titles=text(names.toString().trim(),14,ink);titles.setLineSpacing(dp(4),1);preview.addView(titles);TextView hint=text("将从书架移入回收站，保留 7 天，可恢复正文、封面、进度和书签。手机里的原始书籍文件会保留。",13,muted);hint.setPadding(0,dp(12),0,0);preview.addView(hint);
         dialog().setTitle("删除所选的 "+books.size()+" 本书？").setView(preview).setPositiveButton("移入回收站",(d,w)->removeSelectedToRecycle(books)).show();
     }
     private void removeSelectedToRecycle(ArrayList<LibraryStore.Book> books){
@@ -1378,7 +1405,7 @@ public final class MainActivity extends Activity {
             }catch(Exception e){if(archived!=null)try{recycleBin.delete(archived);}catch(Exception ignored){}runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())error("没有保存成功，原记录保留",e);});}});
         }).show();
     }
-    private void chooseReplacement(LibraryStore.Book book){if(busy)return;pendingReplaceId=book.id;Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*").putExtra(Intent.EXTRA_LOCAL_ONLY,true);launchPicker(pick,PICK_REPLACE);}
+    private void chooseReplacement(LibraryStore.Book book){if(book.epub()){toast("EPUB 暂不支持替换正文，请导入为新书");return;}if(busy)return;pendingReplaceId=book.id;Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*").putExtra(Intent.EXTRA_LOCAL_ONLY,true);launchPicker(pick,PICK_REPLACE);}
     private void readReplacement(Uri uri){String id=pendingReplaceId;pendingReplaceId=null;LibraryStore.Book book=store.find(id);if(book==null||busy)return;if(listenUi!=null)listenUi.stopIfBook(book.id);savePosition();busy=true;showLoading("正在比较新旧正文…");io.execute(()->{try{String filename=displayName(uri);if(!filename.toLowerCase(Locale.ROOT).endsWith(".txt"))throw new IOException("请选择 TXT 文件");byte[] bytes=TextDocument.readLimited(getContentResolver().openInputStream(uri));TextDocument old=repository.load(book),decoded=TextDocument.decode(bytes,null);PositionMigration plan=new PositionMigration(old,decoded,book.offset,book.anchor,book.marks,book.markNotes,book.markAnchors,book.unmappedMarks);runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())showMigration(book,decoded,plan,bytes,filename);});}catch(Exception e){runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())error("新正文无法读取，原书未变更",e);});}});}
     private void commitImport(byte[] bytes,String filename,String title,String category,TextDocument doc){importing(()->{LibraryStore.Book book=store.addPrepared(bytes,filename,title,doc.encoding,category,doc);if(book.encoding.equals(doc.encoding)&&book.length==doc.text.length())repository.adopt(book,doc);return book;},null);}
     private void importPreview(byte[] bytes,String filename,String title,String category,TextDocument doc){
@@ -1397,6 +1424,7 @@ public final class MainActivity extends Activity {
             .setItems(encodings,(d,w)->action.choose(encodings[w])).setNegativeButton("取消",null).show();
     }
     private void changeEncoding(LibraryStore.Book book,String encoding){
+        if(book.epub()){toast("EPUB 使用内置编码，不需要手动切换");return;}
         savePosition();if(busy)return;if(listenUi!=null)listenUi.stopIfBook(book.id);busy=true;showLoading("正在映射原阅读位置和书签…");io.execute(()->{try{TextDocument old=repository.load(book);TextDocument decoded=TextDocument.decode(TextDocument.readLimited(new FileInputStream(store.file(book))),encoding);if(book.chapterRule!=ChapterRule.AUTO){TextDocument ruled=new TextDocument(decoded.text,decoded.encoding,book.chapterRule);ruled.encodingConfidence=decoded.encodingConfidence;decoded=ruled;}final TextDocument mapped=decoded;PositionMigration plan=new PositionMigration(old,mapped,book.offset,book.anchor,book.marks,book.markNotes,book.markAnchors,book.unmappedMarks);runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())showMigration(book,mapped,plan,null,null);});}catch(Exception e){runOnUiThread(()->{hideLoading();busy=false;if(!isDestroyed())error("编码切换失败，原记录保留",e);});}});
     }
     private void chooseCover(LibraryStore.Book book) {
@@ -1441,9 +1469,9 @@ public final class MainActivity extends Activity {
         coverInfo.body.addView(button("恢复默认封面",first(handle,()->{covers.remove(b.id);coverCache.remove(b.id);showLibrary(shelfQuery);toast("已恢复默认封面");})));
         coverInfo.body.addView(button("恢复为导入文件名",first(handle,()->{if(b.sourceName.isEmpty()){toast("这本旧书未记录导入文件名");return;}synchronized(store){String old=b.title;b.title=TitleCleaner.stem(b.sourceName);if(b.title.length()>240)b.title=b.title.substring(0,240);try{store.save();showLibrary(shelfQuery);}catch(Exception e){b.title=old;error("书名未保存",e);}}})));
         SettingsSection contentInfo=new SettingsSection(uiContext(),"book-content","正文与编码","切换编码 · 替换正文 · 导出",uiDark());
-        contentInfo.body.addView(button("切换编码",first(handle,()->pickEncoding(enc->changeEncoding(b,enc)))));
-        contentInfo.body.addView(button("替换正文（保留阅读记录）",first(handle,()->chooseReplacement(b))));
-        contentInfo.body.addView(button("导出原始 TXT",first(handle,()->chooseTextExport(b))));
+        if(!b.epub())contentInfo.body.addView(button("切换编码",first(handle,()->pickEncoding(enc->changeEncoding(b,enc)))));
+        if(!b.epub())contentInfo.body.addView(button("替换正文（保留阅读记录）",first(handle,()->chooseReplacement(b))));
+        contentInfo.body.addView(button((b.epub()?"导出原始 EPUB":"导出原始 TXT"),first(handle,()->chooseTextExport(b))));
         SettingsSection[] sections={organize,coverInfo,contentInfo};
         for(SettingsSection section:sections){
             LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.topMargin=dp(10);panel.addView(section,p);
@@ -1582,13 +1610,13 @@ public final class MainActivity extends Activity {
     private TaskProgress showTaskLoading(String title,String msg){TaskProgress task=new TaskProgress(uiContext(),uiDark());taskProgress=task;task.report(0,0,msg);loading=dialog().setTitle(title).setView(task).setCancelable(false).show();return task;}
     private void showLoading(String msg) {showTaskLoading("请稍候",msg);}
     private void hideLoading() {taskControl=null;if(cancellationSheet!=null){cancellationSheet.dismissNow();cancellationSheet=null;}if(taskProgress!=null){taskProgress.dispose();taskProgress=null;}if(externalFile!=null)chromeHandler.post(()->consumeExternal());if(notificationBook!=null)chromeHandler.post(()->consumeListenIntent());if(loading!=null) {if(loading.isShowing()) loading.dismiss();loading=null;}}
-    @Override public void onBackPressed() {if(busy){requestTaskCancel();return;}if(active!=null) leaveReader();else if(selecting){selecting=false;selectedBooks.clear();showLibrary(shelfQuery);}else if(shelfSearchOpen)closeShelfSearch();else super.onBackPressed();}
+    @Override public void onBackPressed() {if(statsPage){leaveStats();return;}if(busy){requestTaskCancel();return;}if(active!=null) leaveReader();else if(selecting){selecting=false;selectedBooks.clear();showLibrary(shelfQuery);}else if(shelfSearchOpen)closeShelfSearch();else super.onBackPressed();}
 
-    @Override protected void onResume(){super.onResume();statsResumed=true;if(readerFooter!=null)readerFooter.resumed(true);if(lanLibraryDirty&&store!=null&&active==null&&!busy){lanLibraryDirty=false;showLibrary(shelfQuery);}lastReadingInteraction=SystemClock.elapsedRealtime();chromeHandler.removeCallbacks(statsTick);chromeHandler.post(statsTick);Motion.invalidateCache(this);AtmosphereView.refreshAll();if(prefs!=null){refreshAutoTheme();applyReaderWindow();}if(pagedReader!=null)pagedReader.setAnimationEnabled(pageMotion&&Motion.enabled(this));}
+    @Override protected void onResume(){super.onResume();statsResumed=true;if(readerFooter!=null)readerFooter.resumed(true);if(lanLibraryDirty&&store!=null&&active==null&&!statsPage&&!busy){lanLibraryDirty=false;showLibrary(shelfQuery);}lastReadingInteraction=SystemClock.elapsedRealtime();chromeHandler.removeCallbacks(statsTick);chromeHandler.post(statsTick);Motion.invalidateCache(this);AtmosphereView.refreshAll();if(prefs!=null){refreshAutoTheme();applyReaderWindow();}if(pagedReader!=null)pagedReader.setAnimationEnabled(pageMotion&&Motion.enabled(this));}
     @Override protected void onPause() {if(readerFooter!=null)readerFooter.resumed(false);stopLan();if(readingStats!=null)readingStats.pulse(false,lastReadingInteraction);statsResumed=false;chromeHandler.removeCallbacks(statsTick);if(pressedTile instanceof ShelfTile)((ShelfTile)pressedTile).resetLift();pressedTile=null;if(pagedReader!=null)pagedReader.setAnimationEnabled(false);Motion.finishTree(findViewById(android.R.id.content));AppSheet.finishFor(this);savePosition();if(repository!=null)repository.requestProgressSave(true,e->toast("保存失败："+message(e)));chrome.focus(false,SystemClock.elapsedRealtime());chromeHandler.removeCallbacks(chromeTimeout);super.onPause();}
     @Override protected void onSaveInstanceState(Bundle out) {
-        savePosition();if(listenUi!=null)listenUi.save(out);if(active!=null) {out.putString("book",active.id);out.putInt("offset",active.offset);}out.putString("pendingReplaceId",pendingReplaceId);out.putString("pendingEncoding",pendingEncoding);out.putString("pendingCoverId",pendingCoverId);out.putString("pendingExportBookId",pendingExportBookId);out.putBoolean("shelfSearchOpen",shelfSearchOpen);out.putString("shelfQuery",shelfQuery);out.putString("shelfCategory",shelfCategory);out.putBoolean("selecting",selecting);out.putStringArrayList("selectedBooks",new ArrayList<>(selectedBooks));super.onSaveInstanceState(out);
+        savePosition();out.putBoolean("statsPage",statsPage);out.putString("statsReturnBook",statsReturnBook);out.putString("statsSelectedDay",statsSelectedDay);if(listenUi!=null)listenUi.save(out);if(active!=null) {out.putString("book",active.id);out.putInt("offset",active.offset);}out.putString("pendingReplaceId",pendingReplaceId);out.putString("pendingEncoding",pendingEncoding);out.putString("pendingCoverId",pendingCoverId);out.putString("pendingExportBookId",pendingExportBookId);out.putBoolean("shelfSearchOpen",shelfSearchOpen);out.putString("shelfQuery",shelfQuery);out.putString("shelfCategory",shelfCategory);out.putBoolean("selecting",selecting);out.putStringArrayList("selectedBooks",new ArrayList<>(selectedBooks));super.onSaveInstanceState(out);
     }
-    @Override public void onConfigurationChanged(Configuration config) {super.onConfigurationChanged(config);Motion.finishTree(findViewById(android.R.id.content));AppSheet.finishFor(this);if(busy)return;palette=effectivePalette();if(active!=null) {int pos=position();showReader(pos);applyAwake();}else if(!failed)showLibrary(shelfQuery);}
+    @Override public void onConfigurationChanged(Configuration config) {super.onConfigurationChanged(config);Motion.finishTree(findViewById(android.R.id.content));AppSheet.finishFor(this);if(busy)return;if(statsPage){showReadingStats();return;}palette=effectivePalette();if(active!=null) {int pos=position();showReader(pos);applyAwake();}else if(!failed)showLibrary(shelfQuery);}
     @Override protected void onDestroy() {if(readerFooter!=null)readerFooter.resumed(false);stopLan();pendingNoteExport=null;pendingFontChoice=null;tearingDown=true;++generation;++searchGeneration;importStop.set(true);if(taskControl!=null)taskControl.cancel();if(preparedBackup!=null&&!busy){preparedBackup.close();preparedBackup=null;}chrome.leave();chromeHandler.removeCallbacks(chromeTimeout);chromeHandler.removeCallbacks(clearNotice);removeNoticeNow();hideLoading();if(listenUi!=null)listenUi.destroy();AppSheet.destroyFor(this);chromeHandler.removeCallbacksAndMessages(null);coverCache.evictAll();if(Build.VERSION.SDK_INT>=33&&systemBack!=null)getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(systemBack);super.onDestroy();}
 }
