@@ -7,6 +7,8 @@ New-Item -ItemType Directory -Force -Path $TestOutput | Out-Null
 $sourceRoot = Join-Path $projectRoot 'app\src\main\java\com\snowread\app'
 $testSources = @(
     (Join-Path $sourceRoot 'BookNote.java'),
+    (Join-Path $sourceRoot 'ReaderStatusText.java'),
+    (Join-Path $projectRoot 'tests\ReaderStatusTextTest.java'),
     (Join-Path $sourceRoot 'PrivacyPolicy.java'),
     (Join-Path $projectRoot 'tests\PrivacyPolicyTest.java'),
     (Join-Path $sourceRoot 'NoteExport.java'),
@@ -45,7 +47,7 @@ $testSources = @(
 )
 & (Join-Path $JdkHome 'bin\javac.exe') -encoding UTF-8 -d $TestOutput $testSources
 if ($LASTEXITCODE -ne 0) { throw 'Test compilation failed.' }
-foreach ($testClass in @('com.snowread.app.PrivacyPolicyTest','com.snowread.app.BookNoteTest','com.snowread.app.LanTransferServerTest','com.snowread.app.TextDocumentTest','com.snowread.app.ReaderBehaviorTest','com.snowread.app.ShelfOrganizationTest','com.snowread.app.SearchResultsTest','com.snowread.app.ChapterOrderTest','com.snowread.app.ListenCoreTest','com.snowread.app.ReaderPolicyTest','com.snowread.app.DirectoryRowsTest','com.snowread.app.ReadingTimeCounterTest')) {
+foreach ($testClass in @('com.snowread.app.ReaderStatusTextTest','com.snowread.app.PrivacyPolicyTest','com.snowread.app.BookNoteTest','com.snowread.app.LanTransferServerTest','com.snowread.app.TextDocumentTest','com.snowread.app.ReaderBehaviorTest','com.snowread.app.ShelfOrganizationTest','com.snowread.app.SearchResultsTest','com.snowread.app.ChapterOrderTest','com.snowread.app.ListenCoreTest','com.snowread.app.ReaderPolicyTest','com.snowread.app.DirectoryRowsTest','com.snowread.app.ReadingTimeCounterTest')) {
     & (Join-Path $JdkHome 'bin\java.exe') --class-path $TestOutput $testClass
     if ($LASTEXITCODE -ne 0) { throw "Tests failed: $testClass" }
 }

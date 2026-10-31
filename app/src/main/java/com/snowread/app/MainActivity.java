@@ -79,7 +79,8 @@ public final class MainActivity extends Activity {
     private ListView reader;
     private PagedReaderView pagedReader;
     private boolean pagedMode=false,pageMotion=true;
-    private TextView chapterLabel, progressLabel;
+    private TextView chapterLabel, progressLabel,readerHeader;
+    private ReaderFooter readerFooter;
     private SeekBar progress;
     private ReaderAdapter readerAdapter;
     private android.content.SharedPreferences prefs;
@@ -152,6 +153,7 @@ public final class MainActivity extends Activity {
     private void showLibrary(String query) {
         if(shelfDrag!=null){shelfDrag.dispose();shelfDrag=null;}
         boolean listMode=!selecting&&prefs!=null&&prefs.getBoolean("shelfList",false);
+        if(readerFooter!=null)readerFooter.resumed(false);readerFooter=null;readerHeader=null;
         chrome.leave();chromeHandler.removeCallbacks(chromeTimeout);readerTopBar=null;readerBottomBar=null;readerStage=null;shelfQuery=query;
         if(readingStats!=null)readingStats.pulse(false,lastReadingInteraction);active=null;document=null;searchSession=null;reader=null;pagedReader=null;navigation.clear();previewTypeset=null;previewNightMode=null;brightnessGesture.reset();applyTypeset();palette=effectivePalette();appearanceDark=uiDark();
         if(!ShelfOrganization.ALL.equals(shelfCategory)&&!ShelfOrganization.PINNED.equals(shelfCategory)&&!ShelfOrganization.NONE.equals(shelfCategory)&&!store.organization.categories.containsKey(shelfCategory))shelfCategory=ShelfOrganization.ALL;
@@ -718,15 +720,17 @@ public final class MainActivity extends Activity {
         });
     }
     private void showReader(int offset) {
+        if(readerFooter!=null)readerFooter.resumed(false);readerFooter=null;readerHeader=null;
         applyTypeset();palette=effectivePalette();brightnessGesture.reset();
         chromeHandler.removeCallbacks(chromeTimeout);
         reader=null;pagedReader=null;readerAdapter=null;progress=null;progressLabel=null;restoring=false;
         frame(true);
         readerStage=new FrameLayout(this);root.addView(readerStage,new LinearLayout.LayoutParams(-1,-1));
-        // Reader content keeps the same geometry whether overlay controls are visible or hidden.
-        // The chapter name and the progress text live inside the overlay bars, not in this column,
-        // so showing the bars can never cover them.
+        // Persistent header/footer reserve real space. Overlay controls never resize the text viewport.
         LinearLayout content=column();readerStage.addView(content,new FrameLayout.LayoutParams(-1,-1));
+        if(prefs.getBoolean("readerHeader",false)){
+            readerHeader=new TextView(themedContext(isNight()));readerHeader.setTag("reader-page-header");readerHeader.setTextSize(11);readerHeader.setTextColor(muted);readerHeader.setBackgroundColor(bg);readerHeader.setSingleLine(true);readerHeader.setEllipsize(TextUtils.TruncateAt.END);readerHeader.setIncludeFontPadding(false);readerHeader.setPadding(dp(sideMargin),dp(6),dp(sideMargin),dp(4));readerHeader.setMinimumHeight(dp(26));content.addView(readerHeader,new LinearLayout.LayoutParams(-1,-2));
+        }
         chapterLabel=text("",11,muted);chapterLabel.setSingleLine(true);chapterLabel.setEllipsize(TextUtils.TruncateAt.END);
         if(pagedMode) {
             PagedReaderView view=new PagedReaderView(this,document,fontSize,spacing,ink,bg,palette==2?0xFF71612D:0xFFE7D69D,sideMargin,effectiveTypeset());
@@ -753,6 +757,9 @@ public final class MainActivity extends Activity {
                 public void onScrollStateChanged(AbsListView v,int state) {if(state==SCROLL_STATE_TOUCH_SCROLL||state==SCROLL_STATE_FLING)suspendListenFollow();if(state==SCROLL_STATE_IDLE&&!restoring) savePosition();}
                 public void onScroll(AbsListView v,int first,int visible,int total) {if(!restoring&&active!=null) updateProgress(position());}
             });
+        }
+        if(prefs.getBoolean("readerFooter",true)){
+            readerFooter=new ReaderFooter(themedContext(isNight()),bg,muted,sideMargin);content.addView(readerFooter,new LinearLayout.LayoutParams(-1,-2));readerFooter.resumed(statsResumed);
         }
         progressLabel=text("",11,muted);progressLabel.setSingleLine(true);progressLabel.setGravity(Gravity.CENTER);
         progressLabel.setPadding(dp(2),dp(2),dp(2),dp(2));
@@ -868,10 +875,11 @@ public final class MainActivity extends Activity {
     }
     private void updateProgress(int offset) {
         if(document==null||chapterLabel==null) return;if(progress instanceof BookmarkSeekBar)((BookmarkSeekBar)progress).bookmarks(active.marks,document.text.length(),isNight());
-        String currentTitle=document.readingTitle(offset);chapterLabel.setText(currentTitle);if(active!=null&&(!currentTitle.equals(prefs.getString("lastChapter",""))||!active.id.equals(prefs.getString("lastBook",""))))prefs.edit().putString("lastBook",active.id).putString("lastChapter",currentTitle).apply();
+        String currentTitle=document.readingTitle(offset);chapterLabel.setText(currentTitle);if(readerHeader!=null)readerHeader.setText(currentTitle);if(active!=null&&(!currentTitle.equals(prefs.getString("lastChapter",""))||!active.id.equals(prefs.getString("lastBook",""))))prefs.edit().putString("lastBook",active.id).putString("lastChapter",currentTitle).apply();
         if(progress!=null && !restoring) progress.setProgress((int)(1000.0*offset/Math.max(1,document.text.length()-1)));
         String where=document.numberedChapters.isEmpty()?"正文":String.format(Locale.CHINA,"章节 %d/%d",document.numberedOrdinalAt(offset),document.numberedChapters.size());
         String pageInfo=pagedReader==null?"":pagedReader.pageLabel()+" · ";
+        if(readerFooter!=null&&!restoring)readerFooter.progress(ReaderStatusText.progress(offset,document.text.length(),pagedReader==null?"":pagedReader.pageLabel()));
         if(progressLabel!=null && !restoring) progressLabel.setText(pageInfo+where+String.format(Locale.CHINA," · %.1f%%",100.0*offset/Math.max(1,document.text.length()-1)));
     }
     private void refreshHighlights() {
@@ -993,7 +1001,7 @@ public final class MainActivity extends Activity {
         SettingsSection paragraphs=new SettingsSection(typesetContext,"paragraph","段落与留白","行距、段距、页边距与对齐",isNight());
         SettingsSection themesGroup=new SettingsSection(typesetContext,"theme","主题与夜读","纸色与自动夜间",isNight());
         SettingsSection reading=new SettingsSection(typesetContext,"reading","阅读方式与动效","滚动、分页与翻页动画",isNight());
-        SettingsSection display=new SettingsSection(typesetContext,"display","屏幕与亮度","亮度、常亮、全屏与方向",isNight());
+        SettingsSection display=new SettingsSection(typesetContext,"display","屏幕与阅读信息","页眉页脚、亮度、常亮与方向",isNight());
         SettingsSection gestures=new SettingsSection(typesetContext,"gestures","手势与按键","触摸操作与音量翻页",isNight());
         SettingsSection[] sections={fonts,paragraphs,themesGroup,reading,display,gestures};
         for(SettingsSection section:sections){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.topMargin=dp(10);panel.addView(section,p);section.onToggle(()->{
@@ -1054,6 +1062,11 @@ public final class MainActivity extends Activity {
         reading.body.addView(sectionLabel("左右滑动方向"));ChoiceStrip swipeDirection=new ChoiceStrip(typesetContext,new String[]{"左滑下一页","右滑下一页"},prefs.getBoolean("rightSwipeNext",false)?1:0,isNight());swipeDirection.setTag("reading-swipe-direction");reading.body.addView(swipeDirection);
         ToggleRow reduce=new ToggleRow(typesetContext,"减少动效",prefs.getBoolean("reduceMotion",false),isNight());reading.body.addView(reduce);
 
+        display.body.addView(sectionLabel("页眉与页脚（全局）"));
+        ToggleRow footerInfo=new ToggleRow(typesetContext,"页脚 · 进度、时间与电量",prefs.getBoolean("readerFooter",true),isNight()),headerInfo=new ToggleRow(typesetContext,"页眉 · 当前章节标题",prefs.getBoolean("readerHeader",false),isNight());footerInfo.setTag("reading-footer-toggle");headerInfo.setTag("reading-header-toggle");display.body.addView(footerInfo);display.body.addView(headerInfo);
+        display.body.addView(text("随阅读纸色自动配色，并为正文预留空间。关闭两项即可纯净阅读。",12,muted));
+        Runnable furniture=()->{prefs.edit().putBoolean("readerFooter",footerInfo.checked()).putBoolean("readerHeader",headerInfo.checked()).apply();preview.run();};footerInfo.onChanged(furniture);headerInfo.onChanged(furniture);
+        display.body.addView(sectionLabel("亮度与屏幕"));
         ToggleRow followBrightness=new ToggleRow(typesetContext,"跟随系统亮度",prefs.getBoolean("followBrightness",true),isNight());display.body.addView(followBrightness);
         TextView lightLabel=sectionLabel("阅读亮度 · "+Math.round(prefs.getFloat("brightness",.5f)*100)+"%");display.body.addView(lightLabel);
         SeekBar light=new SeekBar(typesetContext);light.setMax(99);light.setProgress(Math.max(0,Math.round(prefs.getFloat("brightness",.5f)*100)-1));light.setEnabled(!followBrightness.checked());display.body.addView(light,new LinearLayout.LayoutParams(-1,dp(48)));
@@ -1066,7 +1079,7 @@ public final class MainActivity extends Activity {
         };followBrightness.onChanged(lightPreview);light.setOnSeekBarChangeListener(new SimpleSeek(){public void onProgressChanged(SeekBar s,int value,boolean user){if(user)lightPreview.run();}});
 
         ToggleRow twoFinger=new ToggleRow(typesetContext,"双指上下滑调亮度",prefs.getBoolean("twoFingerBrightness",false),isNight()),doubleMark=new ToggleRow(typesetContext,"双击正文中间添加书签",prefs.getBoolean("doubleBookmark",false),isNight()),vertical=new ToggleRow(typesetContext,"上下滑动翻页（仅分页）",prefs.getBoolean("verticalPages",false),isNight()),volume=new ToggleRow(typesetContext,"音量键翻页（仅分页）",prefs.getBoolean("volumePages",false),isNight()),repeat=new ToggleRow(typesetContext,"长按音量键连续翻页",prefs.getBoolean("volumeRepeat",true),isNight()),leftHand=new ToggleRow(typesetContext,"左手模式（互换左右点击翻页）",prefs.getBoolean("leftHand",false),isNight());
-
+        
         gestures.body.addView(twoFinger);gestures.body.addView(doubleMark);gestures.body.addView(vertical);gestures.body.addView(leftHand);gestures.body.addView(volume);gestures.body.addView(repeat);
 
         summaries[0]=()->{
@@ -1075,7 +1088,7 @@ public final class MainActivity extends Activity {
             paragraphs.summary(String.format(Locale.CHINA,"行距 %.2f · 留白 %d · 段距 %d · 上下 %d dp",draft.spacing,draft.margin,paragraph.getProgress(),Math.max(4,Math.min(40,prefs.getInt("verticalMargin",4)))));
             themesGroup.summary(paper[Math.max(0,Math.min(2,draft.palette))]+(autoNight.selected()==0?" · 手动":autoNight.selected()==1?" · 跟随系统":" · 定时夜读"));
             reading.summary((modes.selected()==0?"上下滚动":"逐页翻阅")+" · "+(swipeDirection.selected()==1?"右滑下一页":"左滑下一页")+(reduce.checked()?" · 减少动效":motion.checked()?" · 翻页动画开启":" · 翻页动画关闭"));
-            display.summary((followBrightness.checked()?"亮度跟随系统":"亮度 "+(light.getProgress()+1)+"%")+(awake.checked()?" · 常亮开启":""));
+            display.summary((footerInfo.checked()?"页脚开":"页脚关")+" · "+(headerInfo.checked()?"页眉开":"页眉关")+" · "+(followBrightness.checked()?"亮度跟随系统":"亮度 "+(light.getProgress()+1)+"%")+(awake.checked()?" · 常亮开启":""));
             gestures.summary((doubleMark.checked()?"双击书签开启":"双击书签关闭")+" · "+(volume.checked()?"音量翻页开启":"音量翻页关闭")+(leftHand.checked()?" · 左手模式（左右点击已互换）":""));
         };
         Runnable typography=()->{draft.fontFamily=faces.selected();draft.justify=alignment.selected()==1&&Build.VERSION.SDK_INT>=26;draft.paragraphGap=paragraph.getProgress();draft.indent=indent.checked();draft.awake=awake.checked();paragraphLabel.setText("段距 · "+draft.paragraphGap);line.setText(String.format(Locale.CHINA,"行距 · %.2f · 行高约 %d dp",draft.spacing,linePitchDp(draft.font,draft.fontFamily,draft.spacing)));preview.run();};
@@ -1480,13 +1493,12 @@ public final class MainActivity extends Activity {
     private void showLoading(String msg) {showTaskLoading("请稍候",msg);}
     private void hideLoading() {taskControl=null;if(cancellationSheet!=null){cancellationSheet.dismissNow();cancellationSheet=null;}if(taskProgress!=null){taskProgress.dispose();taskProgress=null;}if(externalFile!=null)chromeHandler.post(()->consumeExternal());if(notificationBook!=null)chromeHandler.post(()->consumeListenIntent());if(loading!=null) {if(loading.isShowing()) loading.dismiss();loading=null;}}
     @Override public void onBackPressed() {if(busy){requestTaskCancel();return;}if(active!=null) leaveReader();else if(selecting){selecting=false;selectedBooks.clear();showLibrary(shelfQuery);}else if(shelfSearchOpen)closeShelfSearch();else super.onBackPressed();}
-    /** Refreshes the local forecast in auto mode when the cached one is stale; visual layers re-read prefs on their own. */
 
-    @Override protected void onResume(){super.onResume();statsResumed=true;if(lanLibraryDirty&&store!=null&&active==null&&!busy){lanLibraryDirty=false;showLibrary(shelfQuery);}lastReadingInteraction=SystemClock.elapsedRealtime();chromeHandler.removeCallbacks(statsTick);chromeHandler.post(statsTick);Motion.invalidateCache(this);AtmosphereView.refreshAll();if(prefs!=null){refreshAutoTheme();applyReaderWindow();}if(pagedReader!=null)pagedReader.setAnimationEnabled(pageMotion&&Motion.enabled(this));}
-    @Override protected void onPause() {stopLan();if(readingStats!=null)readingStats.pulse(false,lastReadingInteraction);statsResumed=false;chromeHandler.removeCallbacks(statsTick);if(pressedTile instanceof ShelfTile)((ShelfTile)pressedTile).resetLift();pressedTile=null;if(pagedReader!=null)pagedReader.setAnimationEnabled(false);Motion.finishTree(findViewById(android.R.id.content));AppSheet.finishFor(this);savePosition();if(repository!=null)repository.requestProgressSave(true,e->toast("保存失败："+message(e)));chrome.focus(false,SystemClock.elapsedRealtime());chromeHandler.removeCallbacks(chromeTimeout);super.onPause();}
+    @Override protected void onResume(){super.onResume();statsResumed=true;if(readerFooter!=null)readerFooter.resumed(true);if(lanLibraryDirty&&store!=null&&active==null&&!busy){lanLibraryDirty=false;showLibrary(shelfQuery);}lastReadingInteraction=SystemClock.elapsedRealtime();chromeHandler.removeCallbacks(statsTick);chromeHandler.post(statsTick);Motion.invalidateCache(this);AtmosphereView.refreshAll();if(prefs!=null){refreshAutoTheme();applyReaderWindow();}if(pagedReader!=null)pagedReader.setAnimationEnabled(pageMotion&&Motion.enabled(this));}
+    @Override protected void onPause() {if(readerFooter!=null)readerFooter.resumed(false);stopLan();if(readingStats!=null)readingStats.pulse(false,lastReadingInteraction);statsResumed=false;chromeHandler.removeCallbacks(statsTick);if(pressedTile instanceof ShelfTile)((ShelfTile)pressedTile).resetLift();pressedTile=null;if(pagedReader!=null)pagedReader.setAnimationEnabled(false);Motion.finishTree(findViewById(android.R.id.content));AppSheet.finishFor(this);savePosition();if(repository!=null)repository.requestProgressSave(true,e->toast("保存失败："+message(e)));chrome.focus(false,SystemClock.elapsedRealtime());chromeHandler.removeCallbacks(chromeTimeout);super.onPause();}
     @Override protected void onSaveInstanceState(Bundle out) {
         savePosition();if(listenUi!=null)listenUi.save(out);if(active!=null) {out.putString("book",active.id);out.putInt("offset",active.offset);}out.putString("pendingReplaceId",pendingReplaceId);out.putString("pendingEncoding",pendingEncoding);out.putString("pendingCoverId",pendingCoverId);out.putString("pendingExportBookId",pendingExportBookId);out.putBoolean("shelfSearchOpen",shelfSearchOpen);out.putString("shelfQuery",shelfQuery);out.putString("shelfCategory",shelfCategory);out.putBoolean("selecting",selecting);out.putStringArrayList("selectedBooks",new ArrayList<>(selectedBooks));super.onSaveInstanceState(out);
     }
     @Override public void onConfigurationChanged(Configuration config) {super.onConfigurationChanged(config);Motion.finishTree(findViewById(android.R.id.content));AppSheet.finishFor(this);if(busy)return;palette=effectivePalette();if(active!=null) {int pos=position();showReader(pos);applyAwake();}else if(!failed)showLibrary(shelfQuery);}
-    @Override protected void onDestroy() {stopLan();pendingNoteExport=null;pendingFontChoice=null;tearingDown=true;++generation;++searchGeneration;importStop.set(true);if(taskControl!=null)taskControl.cancel();if(preparedBackup!=null&&!busy){preparedBackup.close();preparedBackup=null;}chrome.leave();chromeHandler.removeCallbacks(chromeTimeout);chromeHandler.removeCallbacks(clearNotice);removeNoticeNow();hideLoading();if(listenUi!=null)listenUi.destroy();AppSheet.destroyFor(this);chromeHandler.removeCallbacksAndMessages(null);coverCache.evictAll();if(Build.VERSION.SDK_INT>=33&&systemBack!=null)getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(systemBack);super.onDestroy();}
+    @Override protected void onDestroy() {if(readerFooter!=null)readerFooter.resumed(false);stopLan();pendingNoteExport=null;pendingFontChoice=null;tearingDown=true;++generation;++searchGeneration;importStop.set(true);if(taskControl!=null)taskControl.cancel();if(preparedBackup!=null&&!busy){preparedBackup.close();preparedBackup=null;}chrome.leave();chromeHandler.removeCallbacks(chromeTimeout);chromeHandler.removeCallbacks(clearNotice);removeNoticeNow();hideLoading();if(listenUi!=null)listenUi.destroy();AppSheet.destroyFor(this);chromeHandler.removeCallbacksAndMessages(null);coverCache.evictAll();if(Build.VERSION.SDK_INT>=33&&systemBack!=null)getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(systemBack);super.onDestroy();}
 }
